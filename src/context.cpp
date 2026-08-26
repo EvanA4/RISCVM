@@ -142,35 +142,18 @@ size_t Context::parse_metric(std::string value, std::string name) {
     size_t numeric;
     sscanf(value.substr(0, value.size() - 1).c_str(), "%lu", &numeric);
 
-    // - look for valid power of two
-    // K -> [10, 19]
-    // M -> [20, 29]
-    // G -> [30, 39]
-    size_t min_guess, metric_10;
+    // - multiply by corresponding power of two
     switch (end) {
         case 'K':
-            min_guess = (1LLU << 9);
-            metric_10 = 1'000;
-            break;
+            return numeric * 1'024;
         case 'M':
-            min_guess = (1LLU << 19);
-            metric_10 = 1'000'000;
-            break;
+            return numeric * 1'048'576;
         case 'G':
-            min_guess = (1LLU << 29);
-            metric_10 = 1'000'000'000;
-            break;
-    }
-
-    for (int i = 0; i < 10; ++i) {
-        if (min_guess / metric_10 == numeric) {
-            return min_guess;
-        }
-        min_guess <<= 1;
+            return numeric * 1'073'741'824;
     }
 
     char msg[100];
-    sprintf(msg, "No matching power of two for argument \"%s\": \"%s\".", name.c_str(), value.c_str());
+    sprintf(msg, "Error parsing metric value for argument \"%s\": \"%s\".", name.c_str(), value.c_str());
     throw std::invalid_argument(msg);
 }
 
@@ -225,7 +208,7 @@ void Context::read_command_line(std::vector<std::string> &vargs) {
             allow_rv32a = parse_bool(next, varg, "on", "off");
         }
         else if (strcmp(varg, "-mem") == 0) {
-            ram_size = parse_metric(varg, "mem");
+            ram_size = parse_metric(next, "mem");
         }
         else if (strcmp(varg, "-harts") == 0) {
             num_harts = parse_int(next, "harts");
@@ -252,13 +235,13 @@ void Context::read_command_line(std::vector<std::string> &vargs) {
             l3_cache.ways = parsed.second;
         }
         else if (strcmp(varg, "-cS1") == 0) {
-            l1_cache.size = parse_metric(varg, "cS1");
+            l1_cache.size = parse_metric(next, "cS1");
         }
         else if (strcmp(varg, "-cS2") == 0) {
-            l2_cache.size = parse_metric(varg, "cS2");
+            l2_cache.size = parse_metric(next, "cS2");
         }
         else if (strcmp(varg, "-cS3") == 0) {
-            l3_cache.size = parse_metric(varg, "cS3");
+            l3_cache.size = parse_metric(next, "cS3");
         }
         else if (strcmp(varg, "-cB1") == 0) {
             l1_cache.block_size = parse_int(next, "cB1");
@@ -338,6 +321,7 @@ void Context::read_config_file(std::string file_path) {
     
     // process file into fake command-line arguments
     std::vector<std::string> vargs;
+    vargs.push_back("fake argv[0]");
     std::string line;
     while (std::getline(file, line)) {
         // ignore comments and strip
@@ -391,7 +375,7 @@ Context::Context(int argc, char **argv) {
 int Context::log(const char *format, ...) {
     va_list args;
     va_start(args, format);
-    int result = std::vprintf(format, args);
+    int result = logger_.log(format, args);
     va_end(args);
     return result;
 }
@@ -402,30 +386,30 @@ void Context::dump() {
     const char *evicts[] = {"FIFO", "LRU", "LFU"};
     const char *coherencies[] = {"NONE", "SNOOP", "DIR"};
 
-    printf("##### CONTEXT DUMP #####\n");
-    printf("Config file: %s\n", config_file.has_value() ? config_file.value().c_str() : "null");
-    printf("ELF file: %s\n", elf_file.has_value() ? elf_file.value().c_str() : "null");
-    printf("Output file: %s\n", output_file.has_value() ? output_file.value().c_str() : "null");
-    printf("Allow RV32M: %s\n", allow_rv32m ? "true" : "false");
-    printf("Allow RV32A: %s\n", allow_rv32a ? "true" : "false");
-    printf("RAM size: %lu\n", ram_size);
-    printf("Number of harts: %d\n", num_harts);
-    printf("Cycle frequency: %d\n", cycle_frequency);
-    printf("Cache depth: %d\n", cache_depth);
+    log("##### CONTEXT DUMP #####\n");
+    log("Config file: %s\n", config_file.has_value() ? config_file.value().c_str() : "null");
+    log("ELF file: %s\n", elf_file.has_value() ? elf_file.value().c_str() : "null");
+    log("Output file: %s\n", output_file.has_value() ? output_file.value().c_str() : "null");
+    log("Allow RV32M: %s\n", allow_rv32m ? "true" : "false");
+    log("Allow RV32A: %s\n", allow_rv32a ? "true" : "false");
+    log("RAM size: %lu\n", ram_size);
+    log("Number of harts: %d\n", num_harts);
+    log("Cycle frequency: %d\n", cycle_frequency);
+    log("Cache depth: %d\n", cache_depth);
     for (int i = 0; i < 3; ++i) {
-        printf("L%d Cache:\n", i + 1);
-        printf("\tAssociativity: %s\n", assocs[caches[i].ca]);
-        printf("\tWays: %d\n", caches[i].ways);
-        printf("\tSize: %lu\n", caches[i].size);
-        printf("\tBlock size: %d\n", caches[i].block_size);
-        printf("\tWrite policy: %s\n", caches[i].is_write_back ? "write-back" : "write-through");
-        printf("\tEviction policy: %s\n", evicts[caches[i].eviction]);
+        log("L%d Cache:\n", i + 1);
+        log("\tAssociativity: %s\n", assocs[caches[i].ca]);
+        log("\tWays: %d\n", caches[i].ways);
+        log("\tSize: %lu\n", caches[i].size);
+        log("\tBlock size: %d\n", caches[i].block_size);
+        log("\tWrite policy: %s\n", caches[i].is_write_back ? "write-back" : "write-through");
+        log("\tEviction policy: %s\n", evicts[caches[i].eviction]);
     }
-    printf("Cache coherency: %s\n", coherencies[cache_coherency]);
-    printf("Branch prediction rows: %d\n", branch_prediction_rows);
-    printf("Default preditction: %d\n", default_prediction);
-    printf("Allow MMU: %s\n", allow_mmu ? "true" : "false");
-    printf("Number of TLB slots: %d\n", num_tlb_slots);
-    printf("TLB eviction Policy: %s\n", evicts[tlb_eviction]);
-    printf("##### CONTEXT DUMP #####\n");
+    log("Cache coherency: %s\n", coherencies[cache_coherency]);
+    log("Branch prediction rows: %d\n", branch_prediction_rows);
+    log("Default preditction: %d\n", default_prediction);
+    log("Allow MMU: %s\n", allow_mmu ? "true" : "false");
+    log("Number of TLB slots: %d\n", num_tlb_slots);
+    log("TLB eviction Policy: %s\n", evicts[tlb_eviction]);
+    log("##### CONTEXT DUMP #####\n");
 }

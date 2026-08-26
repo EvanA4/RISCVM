@@ -7,5 +7,5 @@ class Logger {
     
     public:
         void open(std::string file_name);
-        int log(const char *format, ...);
+        int log(const char *format, va_list args);
 };

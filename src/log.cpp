@@ -1,5 +1,3 @@
-#include <iostream>
-#include <optional>
 #include <string>
 #include <cstdarg>
 #include <stdexcept>
@@ -21,16 +19,9 @@ void Logger::open(std::string file_name) {
     }
 }
 
-int Logger::log(const char* format, ...) {
+int Logger::log(const char* format, va_list args) {
     if (!fout) {
         throw std::runtime_error("Trying to print with an invalid Logger.");
     }
-
-    va_list args;
-    va_start(args, format);
-
-    int result = std::vfprintf(fout, format, args);
-
-    va_end(args);
-    return result;
+    return std::vfprintf(fout, format, args);
 }
