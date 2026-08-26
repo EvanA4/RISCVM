@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -18,7 +19,7 @@ enum CacheCoherency {
 struct CacheType {
     CacheAssociativity ca;
     int ways;
-    size_t size;
+    uint64_t size;
     int block_size;
     bool is_write_back;
     EvictionPolicy eviction;
@@ -31,7 +32,7 @@ class Context {
         std::optional<std::string> output_file = std::nullopt;
         bool allow_rv32m = true;
         bool allow_rv32a = true;
-        size_t ram_size = 1'048'576;
+        uint64_t ram_size = 1'048'576;
         int num_harts = 4;
         int cycle_frequency = 100;
         int cache_depth = 3;
@@ -80,7 +81,7 @@ class Context {
         EvictionPolicy parse_eviction_policy(std::string value, std::string name);
         std::pair<CacheAssociativity, int> parse_cache_type(std::string value, std::string name);
         int parse_int(std::string value, std::string name);
-        size_t parse_metric(std::string value, std::string name);
+        uint64_t parse_metric(std::string value, std::string name);
         bool parse_bool(std::string value, std::string name, const char *truthy, const char *falsey);
         void read_command_line(std::vector<std::string> &vargs);
         std::optional<std::string> get_config_file(std::vector<std::string> &vargs);

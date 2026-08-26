@@ -1,5 +1,5 @@
-#include <cstddef>
 #include <cstring>
+#include <cinttypes>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -15,8 +15,6 @@ const char *VALID_ARGS[] = {
     "-cW3", "-cE1", "-cE2", "-cE3", "-cC", "-bp", "-bpD", "-mmu", "-tlb", "-tlbE"
 };
 const int NUM_VALID_ARGS = sizeof(VALID_ARGS) / sizeof(char *);
-
-// TODO: check for if sscanf == 0
 
 bool Context::is_digit(char src) {
     return src >= '0' && src <= '9';
@@ -104,9 +102,9 @@ int Context::parse_int(std::string value, std::string name) {
     return output;
 }
 
-size_t Context::parse_metric(std::string value, std::string name) {
+uint64_t Context::parse_metric(std::string value, std::string name) {
     // confirm every non-terminal char is digit
-    for (size_t i = 0; i < value.size() - 1; ++i) {
+    for (uint64_t i = 0; i < value.size() - 1; ++i) {
         if (!is_digit(value[i])) {
             char msg[100];
             sprintf(msg, "Invalid numeric for argument \"%s\": \"%s\".", name.c_str(), value.c_str());
@@ -123,7 +121,7 @@ size_t Context::parse_metric(std::string value, std::string name) {
     }
 
     // handle only digits
-    size_t output;
+    uint64_t output;
     if (is_digit(end)) {
         sscanf(value.c_str(), "%lu", &output);
         return output;
@@ -139,7 +137,7 @@ size_t Context::parse_metric(std::string value, std::string name) {
     }
 
     // - parse numeric
-    size_t numeric;
+    uint64_t numeric;
     sscanf(value.substr(0, value.size() - 1).c_str(), "%lu", &numeric);
 
     // - multiply by corresponding power of two
@@ -166,7 +164,7 @@ bool Context::parse_bool(std::string value, std::string name, const char *truthy
 }
 
 void Context::read_command_line(std::vector<std::string> &vargs) {
-    for (size_t i = 1; i < vargs.size(); i += 2) {
+    for (uint64_t i = 1; i < vargs.size(); i += 2) {
         const char *varg = vargs.at(i).c_str();
 
         // confirm argument is valid
@@ -299,7 +297,7 @@ void Context::read_command_line(std::vector<std::string> &vargs) {
 
 std::optional<std::string> Context::get_config_file(std::vector<std::string> &vargs) {
     std::optional<std::string> output = std::nullopt;
-    for (size_t i = 0; i < vargs.size(); ++i) {
+    for (uint64_t i = 0; i < vargs.size(); ++i) {
         if (!std::strcmp("-f", vargs.at(i).c_str())) {
             if (i != vargs.size() - 1) {
                 output = std::string(vargs.at(i+1).c_str());   
@@ -325,7 +323,7 @@ void Context::read_config_file(std::string file_path) {
     std::string line;
     while (std::getline(file, line)) {
         // ignore comments and strip
-        const size_t ignore_idx = line.find("#");
+        const uint64_t ignore_idx = line.find("#");
         if (ignore_idx != std::string::npos) {
             line = line.substr(0, ignore_idx);
         }
@@ -392,7 +390,7 @@ void Context::dump() {
     log("Output file: %s\n", output_file.has_value() ? output_file.value().c_str() : "null");
     log("Allow RV32M: %s\n", allow_rv32m ? "true" : "false");
     log("Allow RV32A: %s\n", allow_rv32a ? "true" : "false");
-    log("RAM size: %lu\n", ram_size);
+    log("RAM size: %" PRIu64 "\n", ram_size);
     log("Number of harts: %d\n", num_harts);
     log("Cycle frequency: %d\n", cycle_frequency);
     log("Cache depth: %d\n", cache_depth);
@@ -400,7 +398,7 @@ void Context::dump() {
         log("L%d Cache:\n", i + 1);
         log("\tAssociativity: %s\n", assocs[caches[i].ca]);
         log("\tWays: %d\n", caches[i].ways);
-        log("\tSize: %lu\n", caches[i].size);
+        log("\tSize: %" PRIu64 "\n", caches[i].size);
         log("\tBlock size: %d\n", caches[i].block_size);
         log("\tWrite policy: %s\n", caches[i].is_write_back ? "write-back" : "write-through");
         log("\tEviction policy: %s\n", evicts[caches[i].eviction]);
