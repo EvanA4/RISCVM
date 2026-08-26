@@ -16,12 +16,12 @@ void Logger::open(std::string file_name) {
     fout = fopen(fn, "w");
     if (!fout) {
         char msg[100];
-        sprintf("Failed to open file: \"%s\"", fn);
+        sprintf(msg, "Failed to open file: \"%s\"", fn);
         throw std::runtime_error(msg);
     }
 }
 
-int Logger::printf(const char* format, ...) {
+int Logger::log(const char* format, ...) {
     if (!fout) {
         throw std::runtime_error("Trying to print with an invalid Logger.");
     }

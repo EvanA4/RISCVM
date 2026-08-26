@@ -5,28 +5,35 @@
 #include <string>
 #include <stdio.h>
 #include <fstream>
-#include "args.hpp"
+#include <stdarg.h>
+#include "context.hpp"
 #include "util.hpp"
-#include "log.hpp"
+
+const char *VALID_ARGS[] = {
+    "-f", "-i", "-o", "-m", "-a", "-mem", "-harts", "-hz", "-cL", "-c1",
+    "-c2", "-c3", "-cS1", "-cS2", "-cS3", "-cB1", "-cB2", "-cB3", "-cW1", "-cW2",
+    "-cW3", "-cE1", "-cE2", "-cE3", "-cC", "-bp", "-bpD", "-mmu", "-tlb", "-tlbE"
+};
+const int NUM_VALID_ARGS = sizeof(VALID_ARGS) / sizeof(char *);
 
 // TODO: check for if sscanf == 0
 
-bool Args::is_digit(char src) {
+bool Context::is_digit(char src) {
     return src >= '0' && src <= '9';
 }
 
-bool Args::is_letter(char src) {
+bool Context::is_letter(char src) {
     return (src >= 'a' && src <= 'z') || (src >= 'A' && src <= 'Z');
 }
 
-char Args::to_uppercase(char src) {
+char Context::to_uppercase(char src) {
     if (src >= 'a' && src <= 'z') {
         return src - 'a' + 'A';
     }
     return src;
 }
 
-CacheCoherency Args::parse_cache_coherency(std::string value, std::string name) {
+CacheCoherency Context::parse_cache_coherency(std::string value, std::string name) {
     if (!strcmp(value.c_str(), "none")) {
         return NONE;
     }
@@ -42,7 +49,7 @@ CacheCoherency Args::parse_cache_coherency(std::string value, std::string name) 
     throw std::invalid_argument(msg);
 }
 
-EvictionPolicy Args::parse_eviction_policy(std::string value, std::string name) {
+EvictionPolicy Context::parse_eviction_policy(std::string value, std::string name) {
     if (!strcmp(value.c_str(), "fifo")) {
         return FIFO;
     }
@@ -58,14 +65,14 @@ EvictionPolicy Args::parse_eviction_policy(std::string value, std::string name) 
     throw std::invalid_argument(msg);
 }
 
-std::pair<CacheAssociativity, int> Args::parse_cache_type(std::string value, std::string name) {
+std::pair<CacheAssociativity, int> Context::parse_cache_type(std::string value, std::string name) {
     if (value.size() < 2LU) {
         char msg[100];
         sprintf(msg, "Invalid argument for \"%s\": \"%s\"", name.c_str(), value.c_str());
         throw std::invalid_argument(msg);
     }
 
-    const char *start = value.substr(0, 2).c_str();
+    const char start[] = {value[0], value[1], '\0'};
     if (!strcmp(start, "dm")) {
         return std::pair<CacheAssociativity, int>(DIRECT_MAPPED, -1);
     }
@@ -87,7 +94,7 @@ std::pair<CacheAssociativity, int> Args::parse_cache_type(std::string value, std
     throw std::invalid_argument(msg);
 }
 
-int Args::parse_int(std::string value, std::string name) {
+int Context::parse_int(std::string value, std::string name) {
     int output;
     if (!sscanf(value.c_str(), "%d", &output)) {
         char msg[100];
@@ -97,7 +104,7 @@ int Args::parse_int(std::string value, std::string name) {
     return output;
 }
 
-size_t Args::parse_metric(std::string value, std::string name) {
+size_t Context::parse_metric(std::string value, std::string name) {
     // confirm every non-terminal char is digit
     for (size_t i = 0; i < value.size() - 1; ++i) {
         if (!is_digit(value[i])) {
@@ -167,7 +174,7 @@ size_t Args::parse_metric(std::string value, std::string name) {
     throw std::invalid_argument(msg);
 }
 
-bool Args::parse_bool(std::string value, std::string name, const char *truthy, const char *falsey) {
+bool Context::parse_bool(std::string value, std::string name, const char *truthy, const char *falsey) {
     if (!strcmp(value.c_str(), truthy)) return true;
     else if (!strcmp(value.c_str(), falsey)) return false;
     char msg[100];
@@ -175,7 +182,7 @@ bool Args::parse_bool(std::string value, std::string name, const char *truthy, c
     throw std::invalid_argument(msg);
 }
 
-void Args::read_command_line(std::vector<std::string> &vargs) {
+void Context::read_command_line(std::vector<std::string> &vargs) {
     for (size_t i = 1; i < vargs.size(); i += 2) {
         const char *varg = vargs.at(i).c_str();
 
@@ -189,14 +196,14 @@ void Args::read_command_line(std::vector<std::string> &vargs) {
         }
         if (!is_valid_arg) {
             char msg[100];
-            sprintf("Invalid argument: \"%s\".", varg);
+            sprintf(msg, "Invalid argument: \"%s\".", varg);
             throw std::invalid_argument(msg);
         }
 
         // confirm space for additional argument
         if (i == vargs.size() - 1) {
             char msg[100];
-            sprintf("Missing value for argument: \"%s\".", varg);
+            sprintf(msg, "Missing value for argument: \"%s\".", varg);
             throw std::invalid_argument(msg);
         }
         std::string next = vargs.at(i + 1);
@@ -301,13 +308,13 @@ void Args::read_command_line(std::vector<std::string> &vargs) {
         else {
             // should never be reached
             char msg[100];
-            sprintf("Invalid argument: \"%s\".", varg);
+            sprintf(msg, "Invalid argument: \"%s\".", varg);
             throw std::invalid_argument(msg);
         }
     }
 }
 
-std::optional<std::string> Args::get_config_file(std::vector<std::string> &vargs) {
+std::optional<std::string> Context::get_config_file(std::vector<std::string> &vargs) {
     std::optional<std::string> output = std::nullopt;
     for (size_t i = 0; i < vargs.size(); ++i) {
         if (!std::strcmp("-f", vargs.at(i).c_str())) {
@@ -321,7 +328,7 @@ std::optional<std::string> Args::get_config_file(std::vector<std::string> &vargs
     return output;
 }
 
-void Args::read_config_file(std::string file_path) {
+void Context::read_config_file(std::string file_path) {
     std::ifstream file(file_path);
     if (!file) {
         char msg[100];
@@ -358,7 +365,7 @@ void Args::read_config_file(std::string file_path) {
     read_command_line(vargs);
 }
 
-Args::Args(int argc, char **argv) {
+Context::Context(int argc, char **argv) {
     // convert args to vector format
     std::vector<std::string> vargs;
     for (int i = 0; i < argc; ++i) {
@@ -381,23 +388,44 @@ Args::Args(int argc, char **argv) {
     }
 }
 
-int Args::log(_In_z_ _Printf_format_string_ char const* const format, ...) {
-    // std::optional<std::string> config_file = std::nullopt;
-    // std::optional<std::string> elf_file = std::nullopt;
-    // std::optional<std::string> output_file = std::nullopt;
-    // bool allow_rv32m = true;
-    // bool allow_rv32a = true;
-    // size_t ram_size = 1'048'576;
-    // int num_harts = 4;
-    // int cycle_frequency = 100;
-    // int cache_depth = 3;
-    // CacheType l1_cache;
-    // CacheType l2_cache;
-    // CacheType l3_cache;
-    // CacheCoherency cache_coherency = SNOOP;
-    // int branch_prediction_rows = 64;
-    // int default_prediction = 0;
-    // bool allow_mmu = true;
-    // int num_tlb_slots = 8;
-    // EvictionPolicy tlb_eviction = LRU;
+int Context::log(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    int result = std::vprintf(format, args);
+    va_end(args);
+    return result;
+}
+
+void Context::dump() {
+    CacheType caches[] = {l1_cache, l2_cache, l3_cache};
+    const char *assocs[] = {"DIRECT_MAPPED", "SET_ASSOC", "FULL_ASSOC"};
+    const char *evicts[] = {"FIFO", "LRU", "LFU"};
+    const char *coherencies[] = {"NONE", "SNOOP", "DIR"};
+
+    printf("##### CONTEXT DUMP #####\n");
+    printf("Config file: %s\n", config_file.has_value() ? config_file.value().c_str() : "null");
+    printf("ELF file: %s\n", elf_file.has_value() ? elf_file.value().c_str() : "null");
+    printf("Output file: %s\n", output_file.has_value() ? output_file.value().c_str() : "null");
+    printf("Allow RV32M: %s\n", allow_rv32m ? "true" : "false");
+    printf("Allow RV32A: %s\n", allow_rv32a ? "true" : "false");
+    printf("RAM size: %lu\n", ram_size);
+    printf("Number of harts: %d\n", num_harts);
+    printf("Cycle frequency: %d\n", cycle_frequency);
+    printf("Cache depth: %d\n", cache_depth);
+    for (int i = 0; i < 3; ++i) {
+        printf("L%d Cache:\n", i + 1);
+        printf("\tAssociativity: %s\n", assocs[caches[i].ca]);
+        printf("\tWays: %d\n", caches[i].ways);
+        printf("\tSize: %lu\n", caches[i].size);
+        printf("\tBlock size: %d\n", caches[i].block_size);
+        printf("\tWrite policy: %s\n", caches[i].is_write_back ? "write-back" : "write-through");
+        printf("\tEviction policy: %s\n", evicts[caches[i].eviction]);
+    }
+    printf("Cache coherency: %s\n", coherencies[cache_coherency]);
+    printf("Branch prediction rows: %d\n", branch_prediction_rows);
+    printf("Default preditction: %d\n", default_prediction);
+    printf("Allow MMU: %s\n", allow_mmu ? "true" : "false");
+    printf("Number of TLB slots: %d\n", num_tlb_slots);
+    printf("TLB eviction Policy: %s\n", evicts[tlb_eviction]);
+    printf("##### CONTEXT DUMP #####\n");
 }

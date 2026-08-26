@@ -3,13 +3,6 @@
 #include <vector>
 #include "log.hpp"
 
-const char *VALID_ARGS[] = {
-    "-f", "-i", "-o", "-m", "-a", "-mem", "-harts", "-hz", "-cL", "-c1",
-    "-c2", "-c3", "-cS1", "-cS2", "-cS3", "-cB1", "-cB2", "-cB3", "-cW1", "-cW2",
-    "-cW3", "-cE1", "-cE2", "-cE3", "-cC", "-bp", "-bpD", "-mmu", "-tlb", "-tlbE"
-};
-const int NUM_VALID_ARGS = sizeof(VALID_ARGS) / sizeof(char *);
-
 enum CacheAssociativity {
   DIRECT_MAPPED, SET_ASSOC, FULL_ASSOC  
 };
@@ -31,7 +24,7 @@ struct CacheType {
     EvictionPolicy eviction;
 };
 
-class Args {
+class Context {
     public:
         std::optional<std::string> config_file = std::nullopt;
         std::optional<std::string> elf_file = std::nullopt;
@@ -73,8 +66,9 @@ class Args {
         int num_tlb_slots = 8;
         EvictionPolicy tlb_eviction = LRU;
 
-        Args(int argc, char **argv);
-        int log(_In_z_ _Printf_format_string_ char const* const format, ...);
+        Context(int argc, char **argv);
+        int log(const char *format, ...);
+        void dump();
 
     private:
         Logger logger_;

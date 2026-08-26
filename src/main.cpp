@@ -1,16 +1,15 @@
 #include <stdexcept>
-#include "args.hpp"
+#include "context.hpp"
 
 int main(int argc, char **argv) {
-    Args *args;
     try {
-        args = process_args(argc, argv);
+        Context context = Context(argc, argv);
+        context.dump();
     } catch (std::invalid_argument &e) {
         printf("Error: %s\n", e.what());
+        return -1;
     } catch (std::runtime_error &e) {
         printf("Error: %s\n", e.what());
+        return -1;
     }
-
-    args->print();
-    free(args);
 }
