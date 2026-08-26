@@ -337,6 +337,14 @@ void Context::read_config_file(std::string file_path) {
             throw std::runtime_error(msg);
         }
 
+        // verify no word is "i", "f", or "o"
+        if (
+            words[0] == "i" || words[0] == "f" || words[0] == "o" ||
+            words[1] == "i" || words[1] == "f" || words[1] == "o"
+        ) {
+            throw std::runtime_error("Words \"i\", \"f\", and \"o\" are illegal in configuration files.");
+        }
+
         words[0] = "-" + words[0];
         vargs.push_back(words[0]);
         vargs.push_back(words[1]);
