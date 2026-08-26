@@ -2,8 +2,8 @@ CXX := clang++
 CXXFLAGS := -std=c++17 -Wall -Wextra
 
 TARGET := bin/vm
-SOURCES := src/args.cpp src/main.cpp
-OBJECTS := bin/args.o bin/main.o
+SOURCES := src/util.cpp src/args.cpp src/main.cpp
+OBJECTS := bin/util.o bin/args.o bin/main.o
 
 .PHONY: all clean
 
@@ -14,7 +14,11 @@ $(TARGET): $(OBJECTS)
 	$(CXX) $(OBJECTS) -o $@
 	$(CXX) $(OBJECTS) -o $@.exe
 
-bin/args.o: src/args.cpp src/args.hpp
+bin/util.o: src/util.cpp src/util.hpp
+	@mkdir -p bin
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+bin/args.o: src/args.cpp src/args.hpp src/util.hpp
 	@mkdir -p bin
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 

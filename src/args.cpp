@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstring>
 #include <optional>
 #include <stdexcept>
@@ -5,13 +6,19 @@
 #include <stdio.h>
 #include <fstream>
 #include "args.hpp"
+#include "util.hpp"
 
-std::optional<std::string> get_config_file(int argc, char **argv) {
+void read_command_line(Args *args, std::vector<std::string> vargs) {
+    printf("read_command_line: %lu args\n", vargs.size());
+    // pain and suffering
+}
+
+std::optional<std::string> get_config_file(std::vector<std::string> vargs) {
     std::optional<std::string> output = std::nullopt;
-    for (int i = 0; i < argc; ++i) {
-        if (!std::strcmp("-f", argv[i])) {
-            if (i != argc - 1) {
-                output = std::string(argv[i+1]);   
+    for (size_t i = 0; i < vargs.size(); ++i) {
+        if (!std::strcmp("-f", vargs.at(i).c_str())) {
+            if (i != vargs.size() - 1) {
+                output = std::string(vargs.at(i+1).c_str());   
             } else {
                 throw std::invalid_argument("Missing file name for configuration file.");
             }
@@ -21,37 +28,49 @@ std::optional<std::string> get_config_file(int argc, char **argv) {
 }
 
 void read_config_file(Args *args, std::string file_path) {
-    std::ifstream file("input.txt");
+    std::ifstream file(file_path);
     if (!file) {
         // throw error
         return;
     }
     
     // process file into fake command-line arguments
-    std::string sum, line;
+    std::vector<std::string> vargs;
+    std::string line;
     while (std::getline(file, line)) {
+        // ignore comments and strip
         const size_t ignore_idx = line.find("#");
         if (ignore_idx != std::string::npos) {
             line = line.substr(0, ignore_idx);
         }
+        line = strstrip(line);
+        if (line.empty()) continue;
+        
+        // guaranteed nonempty line
+        std::vector<std::string> words = strsplit(line, " ");
+        if (words.size() != 2) {
+            // throw error
+        }
 
-        // strip
-        // split by space, filter out empty strings
-        // add hyphen to first word in line?
+        words[0] = "-" + words[0];
+        vargs.push_back(words[0]);
+        vargs.push_back(words[1]);
     }
 
     // amend args object w/ command-line arg parser
-}
-
-void read_command_line(Args *args, int argc, char **argv) {
-    printf("read_command_line: %d args\n", argc);
-    // pain and suffering
+    read_command_line(args, vargs);
 }
 
 Args* process_args(int argc, char **argv) {
+    // convert args to vector format
+    std::vector<std::string> vargs;
+    for (int i = 0; i < argc; ++i) {
+        vargs.push_back(argv[i]);
+    }
+
     Args *args = new Args();
-    std::optional<std::string> cf = get_config_file(argc, argv);
+    std::optional<std::string> cf = get_config_file(vargs);
     if (cf.has_value()) read_config_file(args, cf.value());
-    read_command_line(args, argc, argv);
+    read_command_line(args, vargs);
     return args;
 }
