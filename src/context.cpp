@@ -129,7 +129,6 @@ uint64_t Context::parse_metric(std::string value, std::string name) {
 
     // handle letter at end
     // - validate letter
-    end = to_uppercase(end);
     if (end != 'K' && end != 'M' && end != 'G') {
         char msg[100];
         sprintf(msg, "Invalid metric prefix for argument \"%s\": \"%c\".", name.c_str(), end);
