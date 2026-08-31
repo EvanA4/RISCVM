@@ -1,5 +1,5 @@
 CXX := clang++
-CXXFLAGS := -std=c++17 -Wall -Wextra
+CXXFLAGS := -std=c++17 -Wall -Wextra -D_CRT_SECURE_NO_DEPRECATE
 
 TARGET := bin/vm
 SOURCES := src/log.cpp src/util.cpp src/context.cpp src/main.cpp

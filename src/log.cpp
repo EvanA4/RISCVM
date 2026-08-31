@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include "log.hpp"
 
+
 void Logger::open(std::string file_name) {
     file_name_ = file_name;
 

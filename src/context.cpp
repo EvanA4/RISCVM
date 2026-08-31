@@ -123,7 +123,7 @@ uint64_t Context::parse_metric(std::string value, std::string name) {
     // handle only digits
     uint64_t output;
     if (is_digit(end)) {
-        sscanf(value.c_str(), "%lu", &output);
+        sscanf(value.c_str(), "%" PRIu64, &output);
         return output;
     }
 
@@ -137,7 +137,7 @@ uint64_t Context::parse_metric(std::string value, std::string name) {
 
     // - parse numeric
     uint64_t numeric;
-    sscanf(value.substr(0, value.size() - 1).c_str(), "%lu", &numeric);
+    sscanf(value.substr(0, value.size() - 1).c_str(), "%" PRIu64, &numeric);
 
     // - multiply by corresponding power of two
     switch (end) {

@@ -1,3 +1,4 @@
+#include <cinttypes>
 #include <string>
 #include <vector>
 #include "util.hpp"
@@ -44,7 +45,7 @@ std::vector<std::string> strsplit(std::string src, std::string delimiter) {
 
 
 void print_strs(std::vector<std::string> src) {
-    for (size_t i = 0; i < src.size(); ++i) {
-        printf("[%lu] \"%s\"\n", i, src[i].c_str());
+    for (uint64_t i = 0; i < src.size(); ++i) {
+        printf("[%" PRIu64 "] \"%s\"\n", i, src[i].c_str());
     }
 }
