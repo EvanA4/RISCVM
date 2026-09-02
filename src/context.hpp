@@ -71,9 +71,9 @@ class Context {
         int log(const char *format, ...);
         void dump();
 
+        Logger logger;
+        
     private:
-        Logger logger_;
-
         bool is_digit(char src);
         bool is_letter(char src);
         char to_uppercase(char src);

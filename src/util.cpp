@@ -38,14 +38,18 @@ std::vector<std::string> strsplit(std::string src, std::string delimiter) {
     return output;
 }
 
+int32_t signext(int32_t src, int32_t idx) {
+    // set bits after idx to 0
+    // (accounts for when src is positive)
+    src &= (1 << (idx + 1)) - 1;
 
+    // create mask with all bits after idx as 1
+    int32_t mask = -1;
+    mask ^= (1 << idx) - 1;
 
-// debugging
+    // set mask to 0 if src is positive
+    mask *= (src >> idx) & 1;
 
-
-
-void print_strs(std::vector<std::string> src) {
-    for (uint64_t i = 0; i < src.size(); ++i) {
-        printf("[%" PRIu64 "] \"%s\"\n", i, src[i].c_str());
-    }
+    // put mask on src
+    return src | mask;
 }

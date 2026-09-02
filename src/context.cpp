@@ -373,16 +373,8 @@ Context::Context(int argc, char **argv) {
 
     // open output file in logger
     if (output_file.has_value()) {
-        logger_.open(output_file.value());
+        logger.open(output_file.value());
     }
-}
-
-int Context::log(const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    int result = logger_.log(format, args);
-    va_end(args);
-    return result;
 }
 
 void Context::dump() {
@@ -391,30 +383,30 @@ void Context::dump() {
     const char *evicts[] = {"FIFO", "LRU", "LFU"};
     const char *coherencies[] = {"NONE", "SNOOP", "DIR"};
 
-    log("##### CONTEXT DUMP #####\n");
-    log("Config file: %s\n", config_file.has_value() ? config_file.value().c_str() : "null");
-    log("ELF file: %s\n", elf_file.has_value() ? elf_file.value().c_str() : "null");
-    log("Output file: %s\n", output_file.has_value() ? output_file.value().c_str() : "null");
-    log("Allow RV32M: %s\n", allow_rv32m ? "true" : "false");
-    log("Allow RV32A: %s\n", allow_rv32a ? "true" : "false");
-    log("RAM size: %" PRIu64 "\n", ram_size);
-    log("Number of harts: %d\n", num_harts);
-    log("Cycle frequency: %d\n", cycle_frequency);
-    log("Cache depth: %d\n", cache_depth);
+    logger.log("##### CONTEXT DUMP #####\n");
+    logger.log("Config file: %s\n", config_file.has_value() ? config_file.value().c_str() : "null");
+    logger.log("ELF file: %s\n", elf_file.has_value() ? elf_file.value().c_str() : "null");
+    logger.log("Output file: %s\n", output_file.has_value() ? output_file.value().c_str() : "null");
+    logger.log("Allow RV32M: %s\n", allow_rv32m ? "true" : "false");
+    logger.log("Allow RV32A: %s\n", allow_rv32a ? "true" : "false");
+    logger.log("RAM size: %" PRIu64 "\n", ram_size);
+    logger.log("Number of harts: %d\n", num_harts);
+    logger.log("Cycle frequency: %d\n", cycle_frequency);
+    logger.log("Cache depth: %d\n", cache_depth);
     for (int i = 0; i < 3; ++i) {
-        log("L%d Cache:\n", i + 1);
-        log("\tAssociativity: %s\n", assocs[caches[i].ca]);
-        log("\tWays: %d\n", caches[i].ways);
-        log("\tSize: %" PRIu64 "\n", caches[i].size);
-        log("\tBlock size: %d\n", caches[i].block_size);
-        log("\tWrite policy: %s\n", caches[i].is_write_back ? "write-back" : "write-through");
-        log("\tEviction policy: %s\n", evicts[caches[i].eviction]);
+        logger.log("L%d Cache:\n", i + 1);
+        logger.log("\tAssociativity: %s\n", assocs[caches[i].ca]);
+        logger.log("\tWays: %d\n", caches[i].ways);
+        logger.log("\tSize: %" PRIu64 "\n", caches[i].size);
+        logger.log("\tBlock size: %d\n", caches[i].block_size);
+        logger.log("\tWrite policy: %s\n", caches[i].is_write_back ? "write-back" : "write-through");
+        logger.log("\tEviction policy: %s\n", evicts[caches[i].eviction]);
     }
-    log("Cache coherency: %s\n", coherencies[cache_coherency]);
-    log("Branch prediction rows: %d\n", branch_prediction_rows);
-    log("Default preditction: %d\n", default_prediction);
-    log("Allow MMU: %s\n", allow_mmu ? "true" : "false");
-    log("Number of TLB slots: %d\n", num_tlb_slots);
-    log("TLB eviction Policy: %s\n", evicts[tlb_eviction]);
-    log("##### CONTEXT DUMP #####\n");
+    logger.log("Cache coherency: %s\n", coherencies[cache_coherency]);
+    logger.log("Branch prediction rows: %d\n", branch_prediction_rows);
+    logger.log("Default preditction: %d\n", default_prediction);
+    logger.log("Allow MMU: %s\n", allow_mmu ? "true" : "false");
+    logger.log("Number of TLB slots: %d\n", num_tlb_slots);
+    logger.log("TLB eviction Policy: %s\n", evicts[tlb_eviction]);
+    logger.log("##### CONTEXT DUMP #####\n");
 }
