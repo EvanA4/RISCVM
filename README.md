@@ -15,5 +15,9 @@ run.bat arg1 arg2 ... argN
 
 To run directly through Gradle:
 ```bash
+# In Linux/MacOS
 ./gradlew run --args="arg1 arg2 ... argN"
+
+# In Windows
+gradlew run --args="arg1 arg2 ... argN"
 ```
