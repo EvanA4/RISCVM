@@ -1,11 +1,19 @@
 # RISCVM
 
-To run in POSIX:
+A Java-based RISC-V virtual machine.
+
+## How to Run
+
+To run through custom script (recommended):
 ```bash
-./gradlew run --args="arg1 arg2 ... argN"
+# In Linux/MacOS
+./run.sh arg1 arg2 ... argN
+
+# In Windows
+run.bat arg1 arg2 ... argN
 ```
 
-To run in Windows:
+To run directly through Gradle:
 ```bash
-.\gradlew run --args="arg1 arg2 ... argN"
+./gradlew run --args="arg1 arg2 ... argN"
 ```
