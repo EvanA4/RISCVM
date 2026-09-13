@@ -1,0 +1,28 @@
+harts 2       # 2 harts
+m     on      # RV32M on
+a     off     # RV32A off
+bp    32      # Branch predictor table has 32 slots
+bpD   3       # Default prediction is "Strongly Taken"
+tlb   32      # TLB has 32 slots
+mmu   on      # Turn MMU on
+mem   512K    # 524,288 bytes
+hz    10M     # 10,000,000 Hz
+c1    dm      # L1 cache is direct-mapped
+cS1   4K      # L1 cache is 4KB
+c2    sa,4    # L2 cache is set-associative with 2^4=16 ways
+cS2   8K      # L2 cache is 8KB
+c3    fa      # L3 cache is fully-associative
+cS3   16K     # L3 cache is 16KB
+cB1   4       # Block size of L1 = 2^4 = 16B
+cB2   5       # Block size of L2 = 2^5 = 32B
+cC    dir     # Directory cache coherency
+#############################################################
+## Anything after the pound sign # is ignored as a comment ##
+#############################################################
+# Blank lines and lines with only whitespace are ignored, too.
+
+
+
+# The following line is commented and will not be parsed
+#cB2 6
+cC    snoop   # Duplicate key, but since this is lower, snoop is the value taken.
