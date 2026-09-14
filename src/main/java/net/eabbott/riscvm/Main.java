@@ -1,13 +1,11 @@
 package net.eabbott.riscvm;
 
+import net.eabbott.riscvm.context.Context;
+
 public class Main {
     static void main(String[] args) {
-        if (args.length == 0) {
-            IO.println("No arguments to print, quitting...");
-        }
-
-        for (int i = 0; i < args.length; ++i) {
-            IO.println(String.format("[%d] %s", i, args[i]));
-        }
+        Context context = Context.parseArgs(args);
+        if (context == null) System.exit(-1);
+        context.dump();
     }
 }

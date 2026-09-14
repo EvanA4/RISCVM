@@ -13,26 +13,26 @@ public abstract class AbstractContext {
     public int cycleFrequency = 100;
     public int cacheDepth = 3;
     public CacheContext l1Cache = new CacheContext(
-        CacheAssociativity.DIRECT_MAPPED,
-        -1, 1024, 4, false,
+        new CacheAssociativity(CacheAssociativityType.DIRECT_MAPPED, -1),
+        1024, 4, false,
         EvictionPolicy.FIFO
     );
     public CacheContext l2Cache = new CacheContext(
-            CacheAssociativity.SET_ASSOC,
-            3, 2048, 5, false,
+            new CacheAssociativity(CacheAssociativityType.SET_ASSOC, 3),
+            2048, 5, false,
             EvictionPolicy.LRU
     );
     public CacheContext l3Cache = new CacheContext(
-            CacheAssociativity.FULL_ASSOC,
-            -1, 4096, 6, true,
+            new CacheAssociativity(CacheAssociativityType.DIRECT_MAPPED, -1),
+            4096, 6, true,
             EvictionPolicy.LFU
     );
-    public CacheCoherency cache_coherency = CacheCoherency.SNOOP;
+    public CacheCoherency cacheCoherency = CacheCoherency.SNOOP;
     public int branchPredictionRows = 64;
     public int defaultPrediction = 0;
-    public boolean allow_mmu = true;
+    public boolean allowMMU = true;
     public int numTLBSlots = 8;
-    public EvictionPolicy tlb_eviction = EvictionPolicy.LRU;
+    public EvictionPolicy tlbEviction = EvictionPolicy.LRU;
     public VMLogger logger = new VMLogger();
 
     public abstract void dump();
