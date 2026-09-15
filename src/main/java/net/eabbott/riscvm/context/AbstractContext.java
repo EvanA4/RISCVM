@@ -1,6 +1,7 @@
 package net.eabbott.riscvm.context;
 
 import net.eabbott.riscvm.util.Nullable;
+import net.eabbott.riscvm.util.VMLogger;
 
 public abstract class AbstractContext {
     public @Nullable String configFile = null;

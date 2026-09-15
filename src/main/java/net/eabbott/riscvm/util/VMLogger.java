@@ -1,18 +1,23 @@
-package net.eabbott.riscvm.context;
-
-import net.eabbott.riscvm.util.Nullable;
+package net.eabbott.riscvm.util;
 
 import java.io.FileWriter;
 import java.io.IOException;
 
 public class VMLogger {
-    @Nullable String fileName = null;
-    @Nullable FileWriter writer = null;
+    private static VMLogger instance;
+    private @Nullable FileWriter writer = null;
+
+    public VMLogger() {
+        instance = this;
+    }
+
+    public static VMLogger getInstance() {
+        return instance;
+    }
 
     public void open(String fileName) {
         try {
             this.writer = new FileWriter(fileName);
-            this.fileName = fileName;
         } catch (IOException e) {
             throw new RuntimeException(
                 String.format("Failed to open output file: %s", e.getMessage())
@@ -33,6 +38,10 @@ public class VMLogger {
         } else {
             IO.println(text);
         }
+    }
+
+    public void logBytes(byte[] src) {
+        this.logBytes(src, 4, false);
     }
 
     public void logBytes(byte[] src, int bytesPerLine, boolean reverse) {
@@ -61,9 +70,5 @@ public class VMLogger {
             String.format("%8s", binary).replace(' ', '0')
         );
         return reverse ? stringBuilder.toString() : stringBuilder.reverse().toString();
-    }
-
-    void logBytes(byte[] src) {
-        this.logBytes(src, 4, false);
     }
 }
