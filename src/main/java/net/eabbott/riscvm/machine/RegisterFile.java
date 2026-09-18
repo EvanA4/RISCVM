@@ -1,6 +1,7 @@
 package net.eabbott.riscvm.machine;
 
 public class RegisterFile {
+    public static int STACK_POINTER = 2;
     int[] registers = new int[32];
 
     public int read(int register) {

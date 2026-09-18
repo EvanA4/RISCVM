@@ -7,7 +7,6 @@ public class Hart {
     public Thread[] threads;
     public RegisterFile registers;
     public long programCounter;
-    public long stackPointer;
     public CSRFile csrFile;
     public final int id;
 
