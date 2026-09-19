@@ -3,6 +3,9 @@ package net.eabbott.riscvm.machine.stage;
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.util.VMLogger;
 
+/*
+ * The pipeline execute stage.
+ * */
 public class ExecuteStage extends AbstractStage {
     private final VMLogger logger = VMLogger.getInstance();
     private final Hart hart;

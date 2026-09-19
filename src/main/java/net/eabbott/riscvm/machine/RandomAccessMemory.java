@@ -7,6 +7,9 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.util.concurrent.locks.ReentrantLock;
 
+/*
+* The virtual machine's RAM.
+* */
 public class RandomAccessMemory {
     VMLogger logger = VMLogger.getInstance();
     Arena arena = Arena.ofShared();
@@ -17,6 +20,9 @@ public class RandomAccessMemory {
         this.segment = arena.allocate(size);
     }
 
+    /*
+    * Writes src.length bytes at address in RAM.
+    * */
     public boolean write(long address, byte[] src) {
         boolean output = false;
         lock.lock();
@@ -32,6 +38,9 @@ public class RandomAccessMemory {
         return output;
     }
 
+    /*
+     * Reads size bytes at address in RAM.
+     * */
     public @Nullable byte[] read(long address, long size) {
         byte[] output = null;
         lock.lock();

@@ -3,6 +3,10 @@ package net.eabbott.riscvm.context;
 import net.eabbott.riscvm.util.Nullable;
 import net.eabbott.riscvm.util.VMLogger;
 
+/*
+* A class representing the initial values for each virtual machine configuration.
+* Also requires any Context class to provide a dump function for debugging.
+* */
 public abstract class AbstractContext {
     public @Nullable String configFile = null;
     public @Nullable String elfFile = null;

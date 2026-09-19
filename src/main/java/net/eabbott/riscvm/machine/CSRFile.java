@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.machine;
 
+/*
+* A collection of every CSR for RISCV.
+* */
 public class CSRFile {
     public static final int M_HART_ID = 0xF14;
     public static final int SATP = 0x180;
@@ -21,12 +24,16 @@ public class CSRFile {
     public CSRFile(int mHartID) {
         this.mHartID = mHartID;
 
+        // Set the satp CSR to zero if the MMU is not allowed
         VirtualMachine vm = VirtualMachine.getInstance();
         if (!vm.context.allowMMU) {
             this.satp = 0;
         }
     }
 
+    /*
+    * Returns the value of a CSR.
+    * */
     public int read(int csr) {
         switch (csr) {
             case M_HART_ID -> { return this.mHartID; }
@@ -43,6 +50,9 @@ public class CSRFile {
         }
     }
 
+    /*
+    * Writes to the satp CSR or throws an exception.
+    * */
     public void write(int csr, int value) {
         if (csr == SATP) {
             this.satp = value;
@@ -53,6 +63,9 @@ public class CSRFile {
         }
     }
 
+    /*
+    * Updates the read only CSRs.
+    * */
     public void tick() {
         // update values for read-only values here
     }

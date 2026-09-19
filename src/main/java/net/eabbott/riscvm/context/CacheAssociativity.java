@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.context;
 
+/*
+* A simple data structure for storing a cache's associativity.
+* */
 public class CacheAssociativity {
     public CacheAssociativityType type;
     public int ways;

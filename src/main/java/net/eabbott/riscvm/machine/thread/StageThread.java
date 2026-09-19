@@ -6,6 +6,9 @@ import net.eabbott.riscvm.util.VMLogger;
 
 import java.util.concurrent.BrokenBarrierException;
 
+/*
+* The thread class responsible for executing a stage.
+* */
 public class StageThread extends Thread {
     VirtualMachine vm = VirtualMachine.getInstance();
     VMLogger logger = VMLogger.getInstance();
@@ -14,15 +17,20 @@ public class StageThread extends Thread {
     public StageThread(AbstractStage stage) {
         this.stage = stage;
     }
-    
+
+    /*
+    * Actual function for running a pipeline stage on repeat.
+    * */
     @Override
     public void run() {
+        // At startup, wait for the clock to signal every pipeline to start
         try {
             vm.clock.await();
         } catch (Exception e) {
             return;
         }
 
+        // Keep waiting on the clock and executing the rising/falling functions
         while (!isInterrupted() && !vm.isExiting()) {
             try {
                 stage.rising();

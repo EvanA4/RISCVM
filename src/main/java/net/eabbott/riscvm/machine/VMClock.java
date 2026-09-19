@@ -6,6 +6,9 @@ import java.time.Duration;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 
+/*
+* The clock of the virtual machine. Runs on the main thread.
+* */
 public class VMClock {
     private final VirtualMachine vm = VirtualMachine.getInstance();
     private final VMLogger logger = VMLogger.getInstance();
@@ -19,6 +22,9 @@ public class VMClock {
         this.halfPeriod = Duration.ofNanos(Double.valueOf(periodNano).longValue());
     }
 
+    /*
+    * The loop of the clock. Waits for pipeline threads before continuing.
+    * */
     public void start() {
         while (!vm.isExiting()) {
             try {
@@ -42,6 +48,9 @@ public class VMClock {
         }
     }
 
+    /*
+    * Accessor function for pipeline threads who need to wait on the barrier. Should never be called by the clock.
+    * */
     public void await() throws BrokenBarrierException, InterruptedException {
         this.barrier.await();
     }

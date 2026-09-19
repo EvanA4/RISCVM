@@ -6,7 +6,11 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.*;
 
+/*
+* The main argument parsing class.
+* */
 public class Context extends AbstractContext {
+    // Define the valid arguments for easy argument validation
     private final String[] VALID_ARGS = {
             "-f", "-i", "-o", "-m", "-a", "-mem", "-harts", "-hz", "-cL", "-c1",
             "-c2", "-c3", "-cS1", "-cS2", "-cS3", "-cB1", "-cB2", "-cB3", "-cW1", "-cW2",
@@ -14,19 +18,25 @@ public class Context extends AbstractContext {
     };
     private final Set<String> VALID_ARGS_SET = new HashSet<>(Arrays.stream(VALID_ARGS).toList());
 
+    /*
+    * A static method for creating an argument-populated context class with one function call.
+    * */
     public static @Nullable Context parseArgs(String[] args) {
         Context context = new Context();
         try {
+            // The main argument parsing calls
             context.configFile = context.getConfigFile(args);
             if (context.configFile != null) context.readConfigFile(context.configFile);
             context.readCommandLine(args);
 
+            // After argument parsing, throw an exception if no ELF file was provided
             if (context.elfFile == null) {
                 throw new IllegalArgumentException(
                     "Missing ELF file argument."
                 );
             }
 
+            // Start a logger to print to the correct output file (or stdout)
             if (context.outputFile != null) {
                 context.logger.open(context.outputFile);
             }
@@ -38,6 +48,9 @@ public class Context extends AbstractContext {
         }
     }
 
+    /*
+    * A big, ugly function for printing all the configurations of the virtual machine.
+    * */
     @Override
     public void dump() {
         CacheContext[] caches = {this.l1Cache, this.l2Cache, this.l3Cache};
@@ -69,6 +82,9 @@ public class Context extends AbstractContext {
         logger.log("##### CONTEXT DUMP #####");
     }
 
+    /*
+    * Does a quick pass through the arguments to determine if there's a config file.
+    * */
     private @Nullable String getConfigFile(String[] args) throws IllegalArgumentException {
         String output = null;
         for (int i = 0; i < args.length; ++i) {
@@ -84,17 +100,24 @@ public class Context extends AbstractContext {
         return output;
     }
 
+    /*
+    * Converts any valid configuration file into fake command line arguments. Forwards the fake arguments to the
+    * command line argument parser.
+    * */
     private void readConfigFile(String fileName) {
+        // Try to open the configuration file
         try (FileReader reader = new FileReader(fileName)){
-            List<String> args = new Vector<>();
+            List<String> args = new Vector<>(); // Fake arguments to pass to command line parser
 
+            // For every line in the file...
             List<String> lines = reader.readAllLines();
             for (String line : lines) {
-                int ignoreIdx = line.indexOf("#");
+                int ignoreIdx = line.indexOf("#"); // ...ignore any text after a "#"
                 if (ignoreIdx != -1) line = line.substring(0, ignoreIdx);
                 line = line.strip();
                 if (line.isEmpty()) continue;
 
+                // ...if the line is still nonempty, compute the words
                 String[] split = line.split(" ");
                 List<String> words = new Vector<>();
                 for (String word : split) {
@@ -103,11 +126,13 @@ public class Context extends AbstractContext {
                     }
                 }
                 if (words.size() % 2 != 0) {
+                    // ...throw an exception if there are an uneven number of words in the line
                     throw new IllegalArgumentException(
                         "Argument in config file is either missing or split between lines."
                     );
                 }
 
+                // ...ensure each word is legal and add it to the fake argument list
                 for (String word : words) {
                     if (word.equals("i") || word.equals("f") || word.equals("o")) {
                         throw new IllegalArgumentException(
@@ -118,27 +143,32 @@ public class Context extends AbstractContext {
                 }
             }
 
+            // ...forward the fake arguments to the command line parser
             readCommandLine(args.toArray(new String[0]));
 
         } catch (IOException e) {
+            // Throw an exception if opening the file failed.
             throw new IllegalArgumentException(
                 String.format("Failed to open %s: %s", fileName, e.getMessage())
             );
         }
     }
 
+    /*
+    * The command line parsing function.
+    * */
     private void readCommandLine(String[] args) {
         for (int i = 0; i < args.length; i += 2) {
             String arg = args[i];
 
-            // confirm argument is valid
+            // Confirm argument is valid
             if (!VALID_ARGS_SET.contains(arg)) {
                 throw new IllegalArgumentException(
                     String.format("Invalid argument: \"%s\".", arg)
                 );
             }
 
-            // confirm space for additional argument
+            // Confirm space for additional argument
             if (i == args.length - 1) {
                 throw new IllegalArgumentException(
                     String.format("Missing value for argument: \"%s\".", arg)
@@ -146,7 +176,7 @@ public class Context extends AbstractContext {
             }
             String next = args[i + 1];
 
-            // unholy arg handling of despair :(
+            // Unholy arg handling of despair :(
             switch (arg) {
                 case "-f" -> {
                     this.configFile = next;
@@ -239,7 +269,7 @@ public class Context extends AbstractContext {
                     this.tlbEviction = parseEvictionPolicy(next, "tlbE");
                 }
                 default -> {
-                    // should never be reached
+                    // Should never be reached
                     throw new IllegalArgumentException(
                         String.format("Invalid argument: \"%s\".", arg)
                     );
@@ -248,6 +278,9 @@ public class Context extends AbstractContext {
         }
     }
 
+    /*
+    * Returns true if a passed argument is truthy for boolean flags.
+    * */
     private boolean parseBoolean(String value, String name, String truthy, String falsey) {
         if (value.equals(truthy)) return true;
         else if (value.equals(falsey)) return false;
@@ -256,7 +289,11 @@ public class Context extends AbstractContext {
         );
     }
 
+    /*
+    * Returns an argument value as a parsed long, accounting for metric prefixes.
+    * */
     private long parseMetric(String value, String name) {
+        // Verify all but the last character are digits
         for (int i = 0; i < value.length() - 1; ++i) {
             if (!Character.isDigit(value.charAt(i))) {
                 throw new IllegalArgumentException(
@@ -265,6 +302,7 @@ public class Context extends AbstractContext {
             }
         }
 
+        // Verify the last character is either a digit or a character
         char end = value.charAt(value.length() - 1);
         if (!Character.isDigit(end) && !Character.isLetter(end)) {
             throw new IllegalArgumentException(
@@ -272,22 +310,26 @@ public class Context extends AbstractContext {
             );
         }
 
+        // If the last character is a digit, just parse as a Long
         if (Character.isDigit(end)) {
             return Long.parseLong(value);
         }
 
+        // Otherwise, verify value ends with a metric prefix
         if (end != 'K' && end != 'M' && end != 'G') {
             throw new IllegalArgumentException(
                 String.format("Invalid metric prefix for argument \"%s\": \"%s\"", name, value)
             );
         }
 
+        // Ensure the value isn't just the prefix
         if (value.length() == 1) {
             throw new IllegalArgumentException(
                 String.format("Invalid value for argument \"%s\": \"%s\"", name, value)
             );
         }
 
+        // Actually parse the metric value
         long numeric = Long.parseLong(value.substring(0, value.length() - 1));
         return switch (end) {
             case 'K' -> numeric * 1_024;
@@ -299,6 +341,9 @@ public class Context extends AbstractContext {
         };
     }
 
+    /*
+    * Parses an argument value as a cache associativity.
+    * */
     private CacheAssociativity parseCacheAssociativity(String value, String name) {
         if (value.length() < 2) {
             throw new IllegalArgumentException(
@@ -331,6 +376,9 @@ public class Context extends AbstractContext {
         }
     }
 
+    /*
+    * Returns an argument value parsed as an integer.
+    * */
     private int parseInteger(String value, String name) {
         try {
             return Integer.parseInt(value);
@@ -341,6 +389,9 @@ public class Context extends AbstractContext {
         }
     }
 
+    /*
+    * Returns an argument value parsed as a cache coherency.
+    * */
     private CacheCoherency parseCacheCoherency(String value, String name) {
         switch (value) {
             case "none" -> {
@@ -358,6 +409,9 @@ public class Context extends AbstractContext {
         }
     }
 
+    /*
+    * Returns an argument value parsed as an eviction policy.
+    * */
     private EvictionPolicy parseEvictionPolicy(String value, String name) {
         switch (value) {
             case "fifo" -> {

@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.context;
 
+/*
+* A data structure class for all cache configurations.
+* */
 public class CacheContext {
     public CacheAssociativity ca;
     public long size;
