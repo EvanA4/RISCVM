@@ -1,6 +1,6 @@
-# RISCVM
+# Build.md
 
-A Java-based RISC-V virtual machine.
+A markdown file describing how to run the project. I'd encourage you to just read the `README.md` instead.
 
 ## Prerequisites
 
@@ -41,5 +41,5 @@ java -jar build/libs/RISCVM-1.0-SNAPSHOT.jar arg1 arg2 ... argN
 
 > [!WARNING]
 > When running this program with the scripts,`run.sh` and `run.bat`
-> expect arguments. If no arguments are provided, the Gradle process will 
+> expect arguments. If no arguments are provided, the Gradle process will
 > error before reaching the virtual machine code.
