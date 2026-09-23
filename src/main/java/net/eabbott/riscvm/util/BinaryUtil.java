@@ -1,5 +1,6 @@
 package net.eabbott.riscvm.util;
 
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 
 public class BinaryUtil {
@@ -31,6 +32,30 @@ public class BinaryUtil {
             byte temp = output[i];
             output[i] = output[3-i];
             output[3-i] = temp;
+        }
+        return output;
+    }
+
+    /*
+    * Reads "size" bits at "offset" into an integer
+    * */
+    public static int intFromBytes(byte[] bytes, int offset, int size) {
+        int output = 0;
+        for (int i = offset + size - 1; i >= offset; --i) {
+            output <<= 8;
+            output |= bytes[i] & 0xff;
+        }
+        return output;
+    }
+
+    /*
+     * Reads "size" bits at "offset" into a long
+     * */
+    public static long longFromBytes(byte[] bytes, int offset, int size) {
+        long output = 0;
+        for (int i = offset + size - 1; i >= offset; --i) {
+            output <<= 8;
+            output |= bytes[i] & 0xff;
         }
         return output;
     }

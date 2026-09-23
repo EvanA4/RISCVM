@@ -1,4 +1,4 @@
-package net.eabbott.riscvm.context;
+package net.eabbott.riscvm.context.cache;
 
 /*
 * A simple data structure for storing a cache's associativity.

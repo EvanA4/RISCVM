@@ -1,8 +1,11 @@
 package net.eabbott.riscvm.machine;
 
+import net.eabbott.riscvm.context.elf.ELFContext;
+import net.eabbott.riscvm.context.elf.ELFProgramHeader;
 import net.eabbott.riscvm.util.Nullable;
 import net.eabbott.riscvm.util.VMLogger;
 
+import java.io.IOException;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.util.concurrent.locks.ReentrantLock;
@@ -18,6 +21,46 @@ public class RandomAccessMemory {
 
     public RandomAccessMemory(long size) {
         this.segment = arena.allocate(size);
+    }
+
+    /*
+    * Fills memory with ELF file data.
+    * */
+    public boolean populate(ELFContext elf) {
+        try {
+            for (ELFProgramHeader ph : elf.programHeaders) {
+                elf.reader.seek(ph.offset);
+                byte[] toWrite = new byte[ph.filesz];
+                elf.reader.read(toWrite);
+                if (!this.write(ph.vaddr, toWrite)) return false;
+                if (ph.memsz > ph.filesz && !this.zero(ph.vaddr + ph.filesz, ph.memsz - ph.filesz)) {
+                    return false;
+                }
+            }
+
+            return true;
+
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /*
+     * Writes src.length bytes at address in RAM.
+     * */
+    public boolean zero(long address, int size) {
+        boolean output = false;
+        lock.lock();
+        try {
+            MemorySegment asSegment = MemorySegment.ofArray(new byte[size]);
+            segment.asSlice(address, size).copyFrom(asSegment);
+            output = true;
+        } catch (Exception e) {
+            logger.log("Failed to zero %d bytes of RAM: %s", size, e.getMessage());
+        } finally {
+            lock.unlock();
+        }
+        return output;
     }
 
     /*

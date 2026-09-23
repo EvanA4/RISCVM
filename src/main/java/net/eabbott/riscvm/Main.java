@@ -15,9 +15,15 @@ public class Main {
             System.exit(-1);
             return;
         }
+        context.dump();
 
         // If arguments were valid, create and run the virtual machine
-        VirtualMachine vm = new VirtualMachine(context);
+        VirtualMachine vm = VirtualMachine.create(context);
+        if (vm == null) {
+            System.exit(-1);
+            return;
+        }
+
         vm.start();
     }
 }

@@ -1,5 +1,7 @@
 package net.eabbott.riscvm.context;
 
+import net.eabbott.riscvm.context.cache.*;
+import net.eabbott.riscvm.context.elf.ELFContext;
 import net.eabbott.riscvm.util.Nullable;
 
 import java.io.FileReader;
@@ -34,6 +36,8 @@ public class Context extends AbstractContext {
                 throw new IllegalArgumentException(
                     "Missing ELF file argument."
                 );
+            } else {
+                context.elf = ELFContext.read(context.elfFile);
             }
 
             // Start a logger to print to the correct output file (or stdout)
@@ -79,6 +83,12 @@ public class Context extends AbstractContext {
         logger.log("Allow MMU: %s", allowMMU);
         logger.log("Number of TLB slots: %d", numTLBSlots);
         logger.log("TLB eviction Policy: %s", tlbEviction);
+        logger.log("");
+        logger.log("Number of sections: %d", elf.header.phnum);
+        for (var ph : elf.programHeaders) {
+            logger.log("file offset = 0x%x, vaddr = 0x%x, filesz = %d, memsz = %d", ph.offset, ph.vaddr, ph.filesz, ph.memsz);
+        }
+        logger.log("Program counter should be set to 0x%08x", elf.header.entry);
         logger.log("##### CONTEXT DUMP #####");
     }
 
@@ -412,16 +422,16 @@ public class Context extends AbstractContext {
     /*
     * Returns an argument value parsed as an eviction policy.
     * */
-    private EvictionPolicy parseEvictionPolicy(String value, String name) {
+    private CacheEvictionPolicy parseEvictionPolicy(String value, String name) {
         switch (value) {
             case "fifo" -> {
-                return EvictionPolicy.FIFO;
+                return CacheEvictionPolicy.FIFO;
             }
             case "lru" -> {
-                return EvictionPolicy.LRU;
+                return CacheEvictionPolicy.LRU;
             }
             case "lfu" -> {
-                return EvictionPolicy.LFU;
+                return CacheEvictionPolicy.LFU;
             }
             default -> throw new IllegalArgumentException(
                 String.format("Invalid argument for \"%s\": \"%s\"", name, value)

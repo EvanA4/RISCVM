@@ -17,8 +17,9 @@ public class Hart {
         return programCounter++;
     }
 
-    public Hart(int mHartID) {
+    public Hart(int mHartID, int programCounter) {
         this.id = mHartID;
+        this.programCounter = programCounter;
         this.csrFile = new CSRFile(mHartID);
 
         // Initialize and run each pipeline stage thread

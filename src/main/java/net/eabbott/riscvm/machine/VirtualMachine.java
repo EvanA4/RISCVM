@@ -1,33 +1,40 @@
 package net.eabbott.riscvm.machine;
 
 import net.eabbott.riscvm.context.Context;
+import net.eabbott.riscvm.util.Nullable;
 
 /*
 * The core virtual machine class, with multiple-hart capacity.
 * */
 public class VirtualMachine {
     private static VirtualMachine instance;
-    private final Hart[] harts;
+    private Hart[] harts;
     private int numParkedHarts = 0;
     private boolean isExiting = false;
 
-    public final Context context;
-    public final VMClock clock;
+    public Context context;
+    public VMClock clock;
     public RandomAccessMemory ram;
 
-    public VirtualMachine(Context context) {
-        instance = this;
-        this.context = context;
-        this.ram = new RandomAccessMemory(context.ramSize);
+    public static @Nullable VirtualMachine create(Context context) {
+        instance = new VirtualMachine();
+        instance.context = context;
+        instance.ram = new RandomAccessMemory(context.ramSize);
+        if (!instance.ram.populate(context.elf)) {
+            IO.println("Failed to populate RAM with ELF data.");
+            return null;
+        }
 
         // Initializing the clock does NOT automatically start it
-        this.clock = new VMClock(context.numHarts, context.cycleFrequency);
+        instance.clock = new VMClock(context.numHarts, context.cycleFrequency);
 
         // Initializing the harts automatically starts the pipeline stage threads
-        this.harts = new Hart[context.numHarts];
+        instance.harts = new Hart[context.numHarts];
         for (int i = 0; i < context.numHarts; ++i) {
-            this.harts[i] = new Hart(i);
+            instance.harts[i] = new Hart(i, context.elf.header.entry);
         }
+
+        return instance;
     }
 
     /*
