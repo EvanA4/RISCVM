@@ -11,18 +11,12 @@ public class Main {
     static void main(String[] args) {
         // Parse arguments, exit if failed
         Context context = Context.parseArgs(args);
-        if (context == null) {
-            System.exit(-1);
-            return;
-        }
+        if (context == null) return;
         context.dump();
 
         // If arguments were valid, create and run the virtual machine
         VirtualMachine vm = VirtualMachine.create(context);
-        if (vm == null) {
-            System.exit(-1);
-            return;
-        }
+        if (vm == null) return;
 
         vm.start();
     }
