@@ -27,6 +27,7 @@ Note that, for some of these files, you may need to create new directories.
 - `src/main/java/net/eabbott/riscvm/context/CacheAssociativityType.java` was modified and moved to `src/main/java/net/eabbott/riscvm/context/cache/CacheAssociativityType.java`
 - `src/main/java/net/eabbott/riscvm/context/CacheCoherency.java` was modified and moved to `src/main/java/net/eabbott/riscvm/context/cache/CacheCoherency.java`
 - `src/main/java/net/eabbott/riscvm/context/CacheContext.java` was modified and moved to `src/main/java/net/eabbott/riscvm/context/cache/CacheContext.java`
+- `src/main/java/net/eabbott/riscvm/context/EvictionPolicy.java` was modified, renamed, and moved to `src/main/java/net/eabbott/riscvm/context/cache/CacheEvictionPolicy.java`
 - `src/main/java/net/eabbott/riscvm/context/elf/ELFContext.java` was added
 - `src/main/java/net/eabbott/riscvm/context/elf/ELFHeader.java` was added
 - `src/main/java/net/eabbott/riscvm/context/elf/ELFProgramHeader.java` was added
