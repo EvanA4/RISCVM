@@ -8,10 +8,10 @@ import net.eabbott.riscvm.util.Nullable;
 * */
 public class VirtualMachine {
     private static VirtualMachine instance;
-    private Hart[] harts;
-    private int numParkedHarts = 0;
     private boolean isExiting = false;
 
+    public Hart[] harts;
+    public int numParkedHarts = 0;
     public Context context;
     public VMClock clock;
     public RandomAccessMemory ram;
@@ -31,7 +31,7 @@ public class VirtualMachine {
         // Initializing the harts automatically starts the pipeline stage threads
         instance.harts = new Hart[context.numHarts];
         for (int i = 0; i < context.numHarts; ++i) {
-            instance.harts[i] = new Hart(i, context.elf.header.entry);
+            instance.harts[i] = new Hart(i, context);
         }
 
         return instance;

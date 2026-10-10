@@ -28,7 +28,7 @@ public class Main {
 *  - create pipeline register array for each hart
 *       - should have temporary values (PC,IR,A,B,O,D)
 *       - IR should be its own class
- *  - update pipeline register buffer with clock in secret third stage w/o sleep
+*  - update pipeline register buffer with clock in secret third stage w/o sleep
 *       - should happen after every falling-edge tick
 *       - requires clock and each thread to do an extra wait on the barrier
 *  - instruction fetch stage

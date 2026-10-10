@@ -69,12 +69,12 @@ public class VMLogger {
             if (reverse) {
                 for (int i = end - 1; i >= offset; i--) {
                     if (!line.isEmpty()) line.append(" ");
-                    line.append(stringifyByte(src[i], reverse));
+                    line.append(stringifyByte(src[i]));
                 }
             } else {
                 for (int i = offset; i < end; i++) {
                     if (!line.isEmpty()) line.append(" ");
-                    line.append(stringifyByte(src[i], reverse));
+                    line.append(stringifyByte(src[i]));
                 }
             }
             log(line.toString());
@@ -84,12 +84,9 @@ public class VMLogger {
     /*
      * Converts a byte into a series of 1's and 0's.
      * */
-    private String stringifyByte(byte src, boolean reverse) {
+    private String stringifyByte(byte src) {
         int unsignedByte = src & 0xFF;
         String binary = Integer.toBinaryString(unsignedByte);
-        StringBuilder stringBuilder = new StringBuilder(
-            String.format("%8s", binary).replace(' ', '0')
-        );
-        return reverse ? stringBuilder.toString() : stringBuilder.reverse().toString();
+        return String.format("%8s", binary).replace(' ', '0');
     }
 }

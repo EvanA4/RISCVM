@@ -24,19 +24,6 @@ public class BinaryUtil {
     }
 
     /*
-    * Converts an integer into a byte array
-    * */
-    public static byte[] bytes(int src) {
-        byte[] output = ByteBuffer.allocate(4).putInt(src).array();
-        for (int i = 0; i < 2; ++i) {
-            byte temp = output[i];
-            output[i] = output[3-i];
-            output[3-i] = temp;
-        }
-        return output;
-    }
-
-    /*
     * Reads "size" bits at "offset" into an integer
     * */
     public static int intFromBytes(byte[] bytes, int offset, int size) {

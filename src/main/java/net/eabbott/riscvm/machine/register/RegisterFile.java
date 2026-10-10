@@ -1,4 +1,4 @@
-package net.eabbott.riscvm.machine;
+package net.eabbott.riscvm.machine.register;
 
 /*
 * Each virtual machine's hart's register file.

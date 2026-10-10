@@ -1,5 +1,6 @@
 package net.eabbott.riscvm.machine;
 
+import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.util.VMLogger;
 
 import java.time.Duration;
@@ -15,6 +16,7 @@ public class VMClock {
     private final CyclicBarrier barrier;
     private final Duration halfPeriod;
     private int counter = 0;
+    private ClockPhase phase = ClockPhase.TICK;
 
     public VMClock(int numHarts, long frequency) {
         this.barrier = new CyclicBarrier(numHarts * 5 + 1);
@@ -28,14 +30,33 @@ public class VMClock {
     public void start() {
         while (!vm.isExiting()) {
             try {
-                if (counter == 6) {
+                // Update temporary counter variable
+                if (counter == 9) {
                     this.vm.exit();
                     break;
                 }
-                ++counter;
+                ++this.counter;
 
-                Thread.sleep(halfPeriod);
-                if (vm.isExiting()) break;
+                // If not in TICK phase, sleep until next tick
+                if (this.phase != ClockPhase.TICK) Thread.sleep(halfPeriod);
+                else {
+                    // If in TICK phase, shift pipeline registers
+                    for (Hart hart : this.vm.harts) {
+                        for (PipelineRegister pipelineRegister : hart.pipelineRegisters) {
+                            pipelineRegister.tick();
+                        }
+                    }
+                }
+
+                if (this.vm.isExiting()) break;
+
+                // Update clock phase
+                switch (this.phase) {
+                    case RISING -> this.phase = ClockPhase.FALLING;
+                    case FALLING -> this.phase = ClockPhase.TICK;
+                    case TICK -> this.phase = ClockPhase.RISING;
+                }
+
                 this.logger.log("New clock tick");
                 barrier.await();
 
