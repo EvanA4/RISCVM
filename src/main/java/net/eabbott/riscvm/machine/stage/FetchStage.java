@@ -5,6 +5,8 @@ import net.eabbott.riscvm.machine.VirtualMachine;
 import net.eabbott.riscvm.machine.register.InstructionRegister;
 import net.eabbott.riscvm.util.VMLogger;
 
+import java.nio.ByteBuffer;
+
 /*
  * The pipeline fetch stage.
  * */
@@ -28,6 +30,7 @@ public class FetchStage extends AbstractStage {
 
         // Load raw instruction into new instruction register
         byte[] rawInstruction = this.vm.ram.read(currentPC, 4);
+        byte[] flipped = ByteBuffer.wrap(rawInstruction).flip().array();
         InstructionRegister instructionRegister = new InstructionRegister();
         instructionRegister.inst = rawInstruction;
 

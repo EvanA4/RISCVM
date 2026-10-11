@@ -25,6 +25,7 @@ public class Hart {
         this.programCounter = context.elf.header.entry;
         this.csrFile = new CSRFile(mHartID);
         this.pipelineRegisters = new PipelineRegister[4];
+        for (int i = 0; i < 4; ++i) this.pipelineRegisters[i] = new PipelineRegister();
         this.branchPredictor = new BranchPredictor(context.branchPredictionRows, (byte) (context.defaultPrediction & 0b11));
 
         // Initialize and run each pipeline stage thread

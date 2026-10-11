@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.machine.register;
 
+/*
+* The class representation of the instruction register.
+* */
 public class InstructionRegister {
     public byte[] inst;
     public int left, right, result;

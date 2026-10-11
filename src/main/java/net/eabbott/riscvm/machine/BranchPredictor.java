@@ -2,6 +2,9 @@ package net.eabbott.riscvm.machine;
 
 import java.util.Arrays;
 
+/*
+* A class wrapper of the branch target buffer and branch prediction table.
+* */
 public class BranchPredictor {
     final long[] branchTargetBuffer; // For jump locations
     final byte[] branchPredictionTable; // For jump predictions
