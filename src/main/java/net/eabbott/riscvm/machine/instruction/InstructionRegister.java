@@ -1,4 +1,4 @@
-package net.eabbott.riscvm.machine.register;
+package net.eabbott.riscvm.machine.instruction;
 
 /*
 * The class representation of the instruction register.

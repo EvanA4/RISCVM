@@ -1,5 +1,7 @@
 package net.eabbott.riscvm.machine.register;
 
+import net.eabbott.riscvm.machine.instruction.InstructionRegister;
+
 /*
 * The class representation of a pipeline register. Each pipeline has four of these.
 * A special "tick" function rotates the write-only half of the buffer to the read-only half.
@@ -11,6 +13,7 @@ public class PipelineRegister {
     public PipelineRegister() {
         this.programCounters = new long[2];
         this.instructionRegisters = new InstructionRegister[2];
+        for (int i = 0; i < 2; ++i) this.instructionRegisters[i] = null;
     }
 
     /*
@@ -36,7 +39,7 @@ public class PipelineRegister {
     }
 
     public InstructionRegister getInstructionRegister() {
-        return instructionRegisters[1];
+        return this.instructionRegisters[1];
     }
 
     public void setInstructionRegister(InstructionRegister instructionRegister) {

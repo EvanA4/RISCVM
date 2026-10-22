@@ -2,7 +2,7 @@ package net.eabbott.riscvm.machine.stage;
 
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.machine.VirtualMachine;
-import net.eabbott.riscvm.machine.register.InstructionRegister;
+import net.eabbott.riscvm.machine.instruction.InstructionRegister;
 import net.eabbott.riscvm.util.VMLogger;
 
 import java.nio.ByteBuffer;
@@ -26,13 +26,13 @@ public class FetchStage extends AbstractStage {
         // Determine program counter
         long currentPC = this.hart.programCounter;
         long nextPC = hart.branchPredictor.getBranch(currentPC);
-        this.hart.programCounter = nextPC == -1 ? currentPC + 1 : nextPC;
+        this.hart.programCounter = nextPC == -1 ? currentPC + 4 : nextPC;
 
         // Load raw instruction into new instruction register
         byte[] rawInstruction = this.vm.ram.read(currentPC, 4);
         byte[] flipped = ByteBuffer.wrap(rawInstruction).flip().array();
         InstructionRegister instructionRegister = new InstructionRegister();
-        instructionRegister.inst = rawInstruction;
+        instructionRegister.inst = flipped;
 
         // Write results to pipeline register
         this.hart.pipelineRegisters[0].setProgramCounter(currentPC);

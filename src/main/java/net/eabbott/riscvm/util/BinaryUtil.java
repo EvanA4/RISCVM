@@ -24,7 +24,19 @@ public class BinaryUtil {
     }
 
     /*
-    * Reads "size" bits at "offset" into an integer
+     * Reads "size" bits at "offset" into an integer
+     * */
+    public static int intFromBits(byte[] bytes, int offset, int size, boolean extend) {
+        int output = 0;
+        for (int i = offset + size - 1; i >= offset; --i) {
+            output <<= 1;
+            output |= (bytes[i / 8] >> (i % 8)) & 1;
+        }
+        return extend ? sext(output, size - 1) : output;
+    }
+
+    /*
+    * Reads "size" bytes at "offset" into an integer
     * */
     public static int intFromBytes(byte[] bytes, int offset, int size) {
         int output = 0;
@@ -36,7 +48,7 @@ public class BinaryUtil {
     }
 
     /*
-     * Reads "size" bits at "offset" into a long
+     * Reads "size" bytes at "offset" into a long
      * */
     public static long longFromBytes(byte[] bytes, int offset, int size) {
         long output = 0;
