@@ -18,6 +18,7 @@ public class Hart {
     public PipelineRegister[] pipelineRegisters;
     public BranchPredictor branchPredictor;
     public Context context;
+    public HartStatus status;
 
     public Hart(int mHartID, Context context) {
         this.context = context;
@@ -27,6 +28,7 @@ public class Hart {
         this.pipelineRegisters = new PipelineRegister[4];
         for (int i = 0; i < 4; ++i) this.pipelineRegisters[i] = new PipelineRegister();
         this.branchPredictor = new BranchPredictor(context.branchPredictionRows, (byte) (context.defaultPrediction & 0b11));
+        this.status = HartStatus.RUNNING;
 
         // Initialize and run each pipeline stage thread
         this.threads = new Thread[5];

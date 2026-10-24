@@ -42,8 +42,11 @@ public class VMClock {
                 else {
                     // If in TICK phase, shift pipeline registers
                     for (Hart hart : this.vm.harts) {
-                        for (PipelineRegister pipelineRegister : hart.pipelineRegisters) {
-                            pipelineRegister.tick();
+                        // If hart is running, tick pipeline registers
+                        if (hart.status == HartStatus.RUNNING) {
+                            for (PipelineRegister pipelineRegister : hart.pipelineRegisters) {
+                                pipelineRegister.tick();
+                            }
                         }
                     }
                 }

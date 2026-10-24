@@ -1,6 +1,7 @@
 package net.eabbott.riscvm.machine.stage;
 
 import net.eabbott.riscvm.machine.Hart;
+import net.eabbott.riscvm.machine.HartStatus;
 import net.eabbott.riscvm.util.VMLogger;
 
 /*
@@ -15,10 +16,14 @@ public class ExecuteStage extends AbstractStage {
     }
 
     public void rising() {
+        if (this.hart.status != HartStatus.RUNNING) return;
+
         logger.log("Running rising edge for execute stage for hart #%d", this.hart.id);
     }
 
     public void falling() {
+        if (this.hart.status != HartStatus.RUNNING) return;
+
         logger.log("Running falling edge for execute stage for hart #%d", this.hart.id);
     }
 }
