@@ -12,7 +12,7 @@ import net.eabbott.riscvm.machine.thread.StageThread;
 public class Hart {
     public Thread[] threads;
     public RegisterFile registers;
-    public long programCounter;
+    public int programCounter;
     public CSRFile csrFile;
     public final int id;
     public PipelineRegister[] pipelineRegisters;
@@ -29,6 +29,7 @@ public class Hart {
         for (int i = 0; i < 4; ++i) this.pipelineRegisters[i] = new PipelineRegister();
         this.branchPredictor = new BranchPredictor(context.branchPredictionRows, (byte) (context.defaultPrediction & 0b11));
         this.status = HartStatus.RUNNING;
+        this.registers = new RegisterFile();
 
         // Initialize and run each pipeline stage thread
         this.threads = new Thread[5];

@@ -13,8 +13,7 @@ public enum Opcode {
     SYSTEM(0b11_100),
     AUIPC(0b00_101),
     LUI(0b01_101),
-    AMO(0b11_011),
-    ECALL(0b11_10_011);
+    AMO(0b01_011);
 
     public final int value;
 
@@ -35,7 +34,6 @@ public enum Opcode {
             case 0b00_101 -> AUIPC;
             case 0b01_101 -> LUI;
             case 0b01_011 -> AMO;
-            case 0b11_10_011 -> ECALL;
             default -> null;
         };
     }

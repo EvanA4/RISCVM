@@ -6,7 +6,7 @@ import java.util.Arrays;
 * A class wrapper of the branch target buffer and branch prediction table.
 * */
 public class BranchPredictor {
-    final long[] branchTargetBuffer; // For jump locations
+    final int[] branchTargetBuffer; // For jump locations
     final byte[] branchPredictionTable; // For jump predictions
     final boolean enabled;
     final byte defaultPrediction;
@@ -14,7 +14,7 @@ public class BranchPredictor {
     public BranchPredictor(int length, byte defaultPrediction) {
         this.enabled = length == 0;
         this.defaultPrediction = defaultPrediction;
-        this.branchTargetBuffer = new long[length];
+        this.branchTargetBuffer = new int[length];
         Arrays.fill(this.branchTargetBuffer, -1);
         this.branchPredictionTable = new byte[length];
         Arrays.fill(this.branchPredictionTable, defaultPrediction);
@@ -24,13 +24,13 @@ public class BranchPredictor {
     * Returns the next PC to jump to, accounting for the branch prediction table.
     * Returns -1 if the PC is not in the branch target buffer or the prediction is false.
     * */
-    public long getBranch(long programCounter) {
+    public int getBranch(int programCounter) {
         // Edge case: disabled branch prediction
         if (!this.enabled) return -1;
         int index = Math.toIntExact(programCounter % this.branchTargetBuffer.length);
 
         // Check if entry is in branch target buffer
-        long jumpLocation = this.branchTargetBuffer[index];
+        int jumpLocation = this.branchTargetBuffer[index];
         if (jumpLocation == -1) return -1;
 
         // Check if branch prediction table speculates a jump
@@ -44,7 +44,7 @@ public class BranchPredictor {
     /*
     * Updates the jump location and prediction value for a given instruction address.
     * */
-    public void update(long programCounter, long jumpLocation, boolean increment) {
+    public void update(int programCounter, int jumpLocation, boolean increment) {
         // Edge case: disabled branch prediction
         if (!this.enabled) return;
         int index = Math.toIntExact(programCounter % this.branchTargetBuffer.length);

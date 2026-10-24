@@ -13,7 +13,8 @@ public enum ALUOp {
     RightShiftL, // Logical right shift
     Or,          // Bitwise inclusive OR
     Xor,         // Bitwise exclusive OR
-    And;         // Bitwise AND
+    And,
+    None;         // Bitwise AND
 
     public byte toByte() {
         return (byte) this.ordinal();
