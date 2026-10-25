@@ -71,7 +71,7 @@ public class DecodeStage extends AbstractStage {
         this.nextReg.setInst(this.prevReg.getInst());
 
         // Fetch opcode from raw instruction bytes
-        int opcodeNum = BinaryUtil.intFromBits(instruction, 2, 5, false);
+        int opcodeNum = BinaryUtil.intFromBits(instruction, 0, 7, false);
         Opcode opcode = Opcode.fromInt(opcodeNum);
         if (opcode == null) {
             logger.log("Found illegal instruction opcode for hart #%d.", this.hart.id);
