@@ -1,6 +1,7 @@
 package net.eabbott.riscvm.machine;
 
 import net.eabbott.riscvm.context.Context;
+import net.eabbott.riscvm.machine.memory.RAM;
 import net.eabbott.riscvm.util.Nullable;
 
 /*
@@ -14,12 +15,12 @@ public class VirtualMachine {
     public int numParkedHarts = 0;
     public Context context;
     public VMClock clock;
-    public RandomAccessMemory ram;
+    public RAM ram;
 
     public static @Nullable VirtualMachine create(Context context) {
         instance = new VirtualMachine();
         instance.context = context;
-        instance.ram = new RandomAccessMemory(context.ramSize);
+        instance.ram = new RAM(context.ramSize);
         if (!instance.ram.populate(context.elf)) {
             IO.println("Failed to populate RAM with ELF data.");
             return null;

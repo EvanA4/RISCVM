@@ -23,7 +23,7 @@ For this category, I believe I deserve the full score at step A1. The project bu
 A `RandomAccessFile` at `context/elf/ELFContext.java:17` is used to actually open the file for reading with seeking capabilities. The `ELFContext` follows this lifetime:
 - At `context/Context.java:40`, the argument parsing function attempts to create a `ELFContext` using the ELF file path it parsed earlier. The result is later stored in a new `Context` object.
 - At `Main.java:18`, the `Context` object is passed to the `VirtualMachine` initialization function.
-- At `machine/VirtualMachine.java:23`, the `ELFContext` object is passed to the `RandomAccessMemory` object to populate its `MemorySegment` with the ELF file's binary data.
+- At `machine/VirtualMachine.java:23`, the `ELFContext` object is passed to the `RAM` object to populate its `MemorySegment` with the ELF file's binary data.
 
 ## Category B — ELF Header Parsing and Validation (2.5 pts)
 
@@ -89,7 +89,7 @@ Copies each loadable segment’s p_filesz bytes from file offset p_offset to mem
 
 I believe I have earned full points for this category at step D1.
 
-At `machine/VirtualMachine.java:23`, the `ELFContext` object is passed to the `RandomAccessMemory` class to populate its `MemorySegment` with the ELF file's binary data.
+At `machine/VirtualMachine.java:23`, the `ELFContext` object is passed to the `RAM` class to populate its `MemorySegment` with the ELF file's binary data.
 
 At `machine/RandomAccessMemory.java:31-38`, a for loop is ran such that each loadable program header has it's corresponding data copied to the `MemorySegment`. Line 32 seeks the binary file reader to `p_offset`. The line after creates a buffer of `p_filesz` size. Lines 34-35 read and write the now loaded buffer to the `MemorySegment`. However, zeroing occurs when the `zero` function is called at line 36. Lines 51-64 are where the `zero` function sets the extra bytes from `p_memsz` to `0` in the `MemorySegment`.
 
@@ -123,7 +123,7 @@ At `util/BinaryUtil.java:42-49`, an `intFromBytes` function is defined to parse 
 
 At any point in parsing or validating the ELF header and program headers, an exception may be thrown. To handle these, exceptions are caught at `context/Context.java:49` to exit the program gracefully; a `null` value is returned by the `Context` initialization function. `Main.java:14` checks for this situation and returns safely.
 
-It's also possible that an exception could be thrown when trying to actually populate the `RandomAccessMemory` object with ELF file data. At `machine/VirtualMachine.java:23-26`, the `VirtualMachine` initialization function checks for whether the `RandomAccessMemory` population function had an exception. If so, the the `VirtualMachine` initialization function returns `null`. `Main.java:19` then checks for if the machine is `null` and returns safely if so.
+It's also possible that an exception could be thrown when trying to actually populate the `RAM` object with ELF file data. At `machine/VirtualMachine.java:23-26`, the `VirtualMachine` initialization function checks for whether the `RAM` population function had an exception. If so, the the `VirtualMachine` initialization function returns `null`. `Main.java:19` then checks for if the machine is `null` and returns safely if so.
 
 ## Score Summary
 
