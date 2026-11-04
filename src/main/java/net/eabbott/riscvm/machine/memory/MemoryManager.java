@@ -1,25 +1,30 @@
 package net.eabbott.riscvm.machine.memory;
 
+import net.eabbott.riscvm.machine.CSRFile;
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.context.Context;
 import net.eabbott.riscvm.machine.memory.cache.PrivateCache;
 import net.eabbott.riscvm.machine.memory.cache.PublicCache;
+import net.eabbott.riscvm.machine.memory.virtual.AccessType;
+import net.eabbott.riscvm.machine.memory.virtual.MMU;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-public final class MemoryManager implements BackingStore {
+public final class MemoryManager {
     public static final ConcurrentMap<Integer, PrivateCache> L1_CACHES =
             new ConcurrentHashMap<>();
     public static final ConcurrentMap<Integer, PrivateCache> L2_CACHES =
             new ConcurrentHashMap<>();
 
+    public final MMU mmu;
     public final RAM ram;
     public final Hart hart;
     public final PrivateCache l1;
 
-    public MemoryManager(Hart hart, RAM sharedRam, PublicCache sharedL3, Context context) {
+    public MemoryManager(Hart hart, MMU mmu, RAM sharedRam, PublicCache sharedL3, Context context) {
         this.hart = hart;
+        this.mmu = mmu;
         this.ram = sharedRam;
 
         PrivateCache l2 = new PrivateCache(context.cacheCoherency, context.l2Cache, hart.id, sharedL3);
@@ -29,13 +34,15 @@ public final class MemoryManager implements BackingStore {
         L2_CACHES.put(hart.id, l2);
     }
 
-    @Override
-    public byte[] read(long address, int size) {
+    public byte[] read(long address, int size, AccessType accessType) {
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0)
+            address = this.mmu.translate(address, size, accessType);
         return l1.read(address, size);
     }
 
-    @Override
-    public void write(long address, byte[] data) {
+    public void write(long address, byte[] data, AccessType accessType) {
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0)
+            address = this.mmu.translate(address, data.length, accessType);
         l1.write(address, data);
     }
 }
