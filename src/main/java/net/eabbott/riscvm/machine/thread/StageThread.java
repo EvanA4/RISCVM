@@ -39,10 +39,6 @@ public class StageThread extends Thread {
                 stage.falling();
                 if (isInterrupted() || vm.isExiting()) break;
                 vm.clock.await();
-
-                // Extra await for TICK phase to tick pipeline registers
-                if (isInterrupted() || vm.isExiting()) break;
-                vm.clock.await();
             } catch (InterruptedException e) {
                 break;
             } catch (BrokenBarrierException e) {

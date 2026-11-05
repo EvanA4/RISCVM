@@ -80,3 +80,12 @@ public class VirtualMachine {
         }
     }
 }
+
+/*
+* load-use hazard
+* CSR register file, update variables each clock tick on falling edge?
+* LOAD
+* WRITE
+* Parked harts need to freeze
+* stall when cache miss
+* */

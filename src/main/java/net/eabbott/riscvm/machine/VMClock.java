@@ -16,7 +16,7 @@ public class VMClock {
     private final CyclicBarrier barrier;
     private final Duration halfPeriod;
     private int counter = 0;
-    private ClockPhase phase = ClockPhase.TICK;
+    private ClockPhase phase = ClockPhase.RISING;
 
     public VMClock(int numHarts, long frequency) {
         this.barrier = new CyclicBarrier(numHarts * 5 + 1);
@@ -31,33 +31,20 @@ public class VMClock {
         while (!vm.isExiting()) {
             try {
                 // Update temporary counter variable
-                if (counter == 9) {
+                if (counter == 12) {
                     this.vm.exit();
                     break;
                 }
                 ++this.counter;
 
-                // If not in TICK phase, sleep until next tick
-                if (this.phase != ClockPhase.TICK) Thread.sleep(halfPeriod);
-                else {
-                    // If in TICK phase, shift pipeline registers
-                    for (Hart hart : this.vm.harts) {
-                        // If hart is running, tick pipeline registers
-                        if (hart.status == HartStatus.RUNNING) {
-                            for (PipelineRegister pipelineRegister : hart.pipelineRegisters) {
-                                pipelineRegister.tick();
-                            }
-                        }
-                    }
-                }
+                Thread.sleep(halfPeriod);
 
                 if (this.vm.isExiting()) break;
 
                 // Update clock phase
                 switch (this.phase) {
                     case RISING -> this.phase = ClockPhase.FALLING;
-                    case FALLING -> this.phase = ClockPhase.TICK;
-                    case TICK -> this.phase = ClockPhase.RISING;
+                    case FALLING -> this.phase = ClockPhase.RISING;
                 }
 
                 this.logger.log("New clock tick");

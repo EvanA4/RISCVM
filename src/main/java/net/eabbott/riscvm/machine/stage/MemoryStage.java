@@ -25,5 +25,6 @@ public class MemoryStage extends AbstractStage {
         if (this.hart.status != HartStatus.RUNNING) return;
 
         logger.log("Running falling edge for memory stage for hart #%d", this.hart.id);
+        this.hart.pipelineRegisters[3].tick();
     }
 }

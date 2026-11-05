@@ -1,12 +1,14 @@
 package net.eabbott.riscvm.machine;
 
 import net.eabbott.riscvm.context.Context;
+import net.eabbott.riscvm.machine.instruction.Opcode;
 import net.eabbott.riscvm.machine.memory.MemoryManager;
 import net.eabbott.riscvm.machine.register.CSRFile;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.machine.register.RegisterFile;
 import net.eabbott.riscvm.machine.stage.*;
 import net.eabbott.riscvm.machine.thread.StageThread;
+import net.eabbott.riscvm.util.BinaryUtil;
 
 /*
 * Hart definition of the virtual machine. Has its own PC, ID, pipeline, and CSR and register files.
@@ -22,6 +24,7 @@ public class Hart {
     public Context context;
     public HartStatus status;
     public MemoryManager memman;
+    public final AbstractStage[] stages;
 
     public Hart(int mHartID, Context context) {
         this.context = context;
@@ -35,17 +38,59 @@ public class Hart {
         this.registers = new RegisterFile();
         this.memman = new MemoryManager(this, context);
 
+        // Initialize the stage objects
+        this.stages = new AbstractStage[]{
+            new FetchStage(this),
+            new DecodeStage(this),
+            new ExecuteStage(this),
+            new MemoryStage(this),
+            new WriteStage(this),
+        };
+
         // Initialize and run each pipeline stage thread
         this.threads = new Thread[5];
-        threads[0] = new StageThread(new FetchStage(this));
-        threads[1] = new StageThread(new DecodeStage(this));
-        threads[2] = new StageThread(new ExecuteStage(this));
-        threads[3] = new StageThread(new MemoryStage(this));
-        threads[4] = new StageThread(new WriteStage(this));
+        for (int i = 0; i < 5; ++i) threads[i] = new StageThread(this.stages[i]);
         for (int i = 0; i < 5; ++i) threads[i].start();
+    }
+
+    public boolean hasLoadUseHazard() {
+        byte[] decodeInst = pipelineRegisters[0].getInst();
+        byte[] executeInst = pipelineRegisters[1].getInst();
+
+        if (decodeInst.length == 0 || executeInst.length == 0) return false;
+
+        int executeOpcodeBits =
+                BinaryUtil.intFromBits(executeInst, 0, 7, false);
+        if (Opcode.fromInt(executeOpcodeBits) != Opcode.LOAD) return false;
+
+        int rd = BinaryUtil.intFromBits(executeInst, 7, 5, false);
+        if (rd == 0) return false;
+
+        int decodeOpcodeBits =
+                BinaryUtil.intFromBits(decodeInst, 0, 7, false);
+        Opcode decodeOpcode = Opcode.fromInt(decodeOpcodeBits);
+        if (decodeOpcode == null) return false;
+
+        int rs1 = BinaryUtil.intFromBits(decodeInst, 15, 5, false);
+        boolean usesRs2 = switch (decodeOpcode) {
+            case OP, STORE, BRANCH, AMO -> true;
+            default -> false;
+        };
+        int rs2 = usesRs2
+                ? BinaryUtil.intFromBits(decodeInst, 20, 5, false)
+                : -1;
+
+        return rs1 == rd || rs2 == rd;
     }
 
     public void exit() {
         for (int i = 0; i < 5; ++i) threads[i].interrupt();
     }
 }
+
+/*
+* Fancy pipeline operations:
+* - Branch mispredictions: SQUASH a stage
+* - Stale registers between writeback and decode: FORWARD
+* - Decode needs a load value: STALL and FORWARD
+* */

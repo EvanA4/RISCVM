@@ -6,7 +6,7 @@ package net.eabbott.riscvm.machine.register;
 * */
 public class PipelineRegister {
     public byte[][] inst;
-    public int[] pc, left, right, result, disp, strval;
+    public int[] pc, predictedNextPc, left, right, result, disp, strval;
     public byte[] rd, memop, aluop, amoop, amorl, amoaq;
 
     public PipelineRegister() {
@@ -17,6 +17,7 @@ public class PipelineRegister {
         this.result = new int[2];
         this.disp = new int[2];
         this.strval = new int[2];
+        this.predictedNextPc = new int[2];
         this.rd = new byte[2];
         this.memop = new byte[2];
         this.aluop = new byte[2];
@@ -43,6 +44,7 @@ public class PipelineRegister {
         this.amoop[1] = this.amoop[0];
         this.amorl[1] = this.amorl[0];
         this.amoaq[1] = this.amoaq[0];
+        this.predictedNextPc[1] = this.predictedNextPc[0];
 
         // Flush write-only values
         this.inst[0] = new byte[0];
@@ -58,13 +60,41 @@ public class PipelineRegister {
         this.amoop[0] = 0;
         this.amorl[0] = 0;
         this.amoaq[0] = 0;
+        this.predictedNextPc[0] = 0;
     }
+
+    public void setNextToNop() {
+        // Sets pipeline register to ADDI x0, x0, 0
+        this.inst[0] = new byte[] { 0x13, 0x00, 0x00, 0x00 };
+        this.pc[0] = 0;
+        this.left[0] = 0;
+        this.right[0] = 0;
+        this.result[0] = 0;
+        this.disp[0] = 0;
+        this.strval[0] = 0;
+        this.rd[0] = 0;
+        this.memop[0] = 0;
+        this.aluop[0] = 0;
+        this.amoop[0] = 0;
+        this.amorl[0] = 0;
+        this.amoaq[0] = 0;
+        this.predictedNextPc[0] = 0;
+    }
+
 
     /*
     * Getters and setters for the pipeline register.
     * Getters read from the read-only half, while the
     * setters write to the write-only half.
     * */
+
+    public int getPredictedNextPc() {
+        return predictedNextPc[1];
+    }
+
+    public void setPredictedNextPc(int pc) {
+        predictedNextPc[0] = pc;
+    }
 
     public byte[] getInst() {
         return inst[1];

@@ -69,6 +69,7 @@ public class DecodeStage extends AbstractStage {
         }
         this.nextReg.setPC(this.prevReg.getPC());
         this.nextReg.setInst(this.prevReg.getInst());
+        this.nextReg.setPredictedNextPc(this.prevReg.getPredictedNextPc());
 
         // Fetch opcode from raw instruction bytes
         int opcodeNum = BinaryUtil.intFromBits(instruction, 0, 7, false);
@@ -88,7 +89,7 @@ public class DecodeStage extends AbstractStage {
 
         // Case-by-case processing
         switch (opcode) {
-            case LOAD, JALR, OP_IMM, SYSTEM -> {
+            case LOAD, SYSTEM -> {
                 logger.log("Processing type I: %s", opcode);
                 int imm = BinaryUtil.intFromBits(instruction, 20, 12, true);
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
@@ -128,6 +129,48 @@ public class DecodeStage extends AbstractStage {
                         return;
                     }
                 }
+            }
+            case JALR -> {
+                logger.log("Processing type I: %s", opcode);
+                if (funct3 != 0) {
+                    this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                    return;
+                }
+
+                int imm = BinaryUtil.intFromBits(instruction, 20, 12, true);
+                this.nextReg.setLeft(this.hart.registers.read(rs1));
+                this.nextReg.setRight(imm);
+                this.nextReg.setDisp(imm);
+                this.nextReg.setRd((byte) rd);
+                this.nextReg.setALUOp(ALUOp.Add.toByte());
+            }
+            case OP_IMM -> {
+                logger.log("Processing type I: %s", opcode);
+                int imm = BinaryUtil.intFromBits(instruction, 20, 12, true);
+                this.nextReg.setLeft(this.hart.registers.read(rs1));
+                this.nextReg.setRight(imm);
+                this.nextReg.setRd((byte) rd);
+                this.nextReg.setDisp(imm);
+
+                ALUOp parsed = switch (funct3) {
+                    case 0b000 -> ALUOp.Add;
+                    case 0b001 -> ALUOp.LeftShift;
+                    case 0b100 -> ALUOp.Xor;
+                    case 0b101 -> ALUOp.RightShiftL;
+                    case 0b110 -> ALUOp.Or;
+                    case 0b111 -> ALUOp.And;
+                    default -> ALUOp.None;
+                };
+                if (parsed == ALUOp.RightShiftL) {
+                    if ((imm >> 5) == 0b0100000) parsed = ALUOp.RightShiftA;
+                    else if ((imm >> 5) != 0) parsed = ALUOp.None;
+                }
+                if (parsed == ALUOp.None) {
+                    this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                    return;
+                }
+
+                this.nextReg.setALUOp(parsed.toByte());
             }
             case STORE -> {
                 logger.log("Processing type S: %s", opcode);
@@ -225,11 +268,21 @@ public class DecodeStage extends AbstractStage {
                 this.nextReg.setRd((byte) rd);
             }
         }
+
+        if (this.hart.hasLoadUseHazard()) {
+            this.hart.stages[0].needToFreeze = true;
+            this.needToNOP = true;
+        }
     }
 
     public void falling() {
         if (this.hart.status != HartStatus.RUNNING) return;
 
         logger.log("Running falling edge for decode stage for hart #%d", this.hart.id);
+        if (this.needToNOP) {
+            this.hart.pipelineRegisters[1].setNextToNop();
+            this.needToNOP = false;
+        }
+        this.hart.pipelineRegisters[1].tick();
     }
 }
