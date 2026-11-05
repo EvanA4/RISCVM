@@ -1,6 +1,8 @@
 package net.eabbott.riscvm.machine;
 
 import net.eabbott.riscvm.context.Context;
+import net.eabbott.riscvm.machine.memory.MemoryManager;
+import net.eabbott.riscvm.machine.register.CSRFile;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.machine.register.RegisterFile;
 import net.eabbott.riscvm.machine.stage.*;
@@ -19,17 +21,19 @@ public class Hart {
     public BranchPredictor branchPredictor;
     public Context context;
     public HartStatus status;
+    public MemoryManager memman;
 
     public Hart(int mHartID, Context context) {
         this.context = context;
         this.id = mHartID;
         this.programCounter = context.elf.header.entry;
-        this.csrFile = new CSRFile(mHartID);
+        this.csrFile = new CSRFile(mHartID, context);
         this.pipelineRegisters = new PipelineRegister[4];
         for (int i = 0; i < 4; ++i) this.pipelineRegisters[i] = new PipelineRegister();
         this.branchPredictor = new BranchPredictor(context.branchPredictionRows, (byte) (context.defaultPrediction & 0b11));
         this.status = HartStatus.RUNNING;
         this.registers = new RegisterFile();
+        this.memman = new MemoryManager(this, context);
 
         // Initialize and run each pipeline stage thread
         this.threads = new Thread[5];

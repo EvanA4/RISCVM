@@ -16,9 +16,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * mode and block size. The global lock serializes accesses and coherence
  * transitions across private caches.
  */
-public final class PrivateCache implements BackingStore {
+public final class L1Cache implements BackingStore {
     private static final Object BUS_LOCK = new Object();
-    private static final Map<Integer, PrivateCache> CACHES = new ConcurrentHashMap<>();
+    private static final Map<Integer, L1Cache> CACHES = new ConcurrentHashMap<>();
 
     private final int hardId;
     private final int blockSize;
@@ -29,15 +29,15 @@ public final class PrivateCache implements BackingStore {
     private final CacheCoherency coherency;
 
     // Insertion order is used for deterministic tie-breaking.
-    private final Map<Long, MESICacheLine> lines = new HashMap<>();
+    private final Map<Long, L12Line> lines = new HashMap<>();
 
     // Per-block sharers tracked by the directory protocol.
-    private static final Map<Long, Map<Integer, MESICacheLine>> DIRECTORY =
+    private static final Map<Long, Map<Integer, L12Line>> DIRECTORY =
             new HashMap<>();
 
     private long clock;
 
-    public PrivateCache(CacheCoherency coherency, CacheContext context, int hartId, BackingStore backingStore) {
+    public L1Cache(CacheCoherency coherency, CacheContext context, int hartId, BackingStore backingStore) {
         Objects.requireNonNull(context, "context");
         this.backingStore = Objects.requireNonNull(backingStore, "backingStore");
 
@@ -53,7 +53,7 @@ public final class PrivateCache implements BackingStore {
         this.coherency = Objects.requireNonNull(coherency, "coherency");
 
         synchronized (BUS_LOCK) {
-            PrivateCache previous = CACHES.putIfAbsent(hardId, this);
+            L1Cache previous = CACHES.putIfAbsent(hardId, this);
             if (previous != null) {
                 throw new IllegalStateException("Cache already registered for hart " + hardId);
             }
@@ -73,7 +73,7 @@ public final class PrivateCache implements BackingStore {
                 int offset = (int) (currentAddress - blockAddress);
                 int count = Math.min(size - copied, blockSize - offset);
 
-                MESICacheLine line = getOrLoad(blockAddress);
+                L12Line line = getOrLoad(blockAddress);
                 touch(line);
                 System.arraycopy(line.data, offset, result, copied, count);
                 copied += count;
@@ -95,7 +95,7 @@ public final class PrivateCache implements BackingStore {
                 int offset = (int) (currentAddress - blockAddress);
                 int count = Math.min(data.length - copied, blockSize - offset);
 
-                MESICacheLine line = getOrLoad(blockAddress);
+                L12Line line = getOrLoad(blockAddress);
                 touch(line);
 
                 System.arraycopy(data, copied, line.data, offset, count);
@@ -113,8 +113,8 @@ public final class PrivateCache implements BackingStore {
         }
     }
 
-    private MESICacheLine getOrLoad(long blockAddress) {
-        MESICacheLine line = lines.get(blockAddress);
+    private L12Line getOrLoad(long blockAddress) {
+        L12Line line = lines.get(blockAddress);
         if (line != null && line.state != MESI.INVALID) {
             return line;
         }
@@ -126,9 +126,9 @@ public final class PrivateCache implements BackingStore {
 
         if (coherency == CacheCoherency.SNOOP) {
             // Snooping finds copies by examining the other private caches.
-            for (PrivateCache peer : CACHES.values()) {
+            for (L1Cache peer : CACHES.values()) {
                 if (peer == this) continue;
-                MESICacheLine peerLine = peer.lines.get(blockAddress);
+                L12Line peerLine = peer.lines.get(blockAddress);
                 if (peerLine == null || peerLine.state == MESI.INVALID) continue;
 
                 if (data == null) data = Arrays.copyOf(peerLine.data, blockSize);
@@ -139,11 +139,11 @@ public final class PrivateCache implements BackingStore {
             }
         } else if (coherency == CacheCoherency.DIR) {
             // Directory lookup finds only the caches registered as sharers.
-            Map<Integer, MESICacheLine> sharers = DIRECTORY.get(blockAddress);
+            Map<Integer, L12Line> sharers = DIRECTORY.get(blockAddress);
             if (sharers != null) {
-                for (Map.Entry<Integer, MESICacheLine> entry : sharers.entrySet()) {
+                for (Map.Entry<Integer, L12Line> entry : sharers.entrySet()) {
                     if (entry.getKey() == hardId) continue;
-                    MESICacheLine peerLine = entry.getValue();
+                    L12Line peerLine = entry.getValue();
                     if (peerLine == null || peerLine.state == MESI.INVALID) continue;
 
                     if (data == null) data = Arrays.copyOf(peerLine.data, blockSize);
@@ -163,7 +163,7 @@ public final class PrivateCache implements BackingStore {
         }
 
         MESI state = shared ? MESI.SHARED : MESI.EXCLUSIVE;
-        line = new MESICacheLine(blockAddress, data, state, ++clock);
+        line = new L12Line(blockAddress, data, state, ++clock);
         lines.put(blockAddress, line);
         registerDirectoryLine(blockAddress, line);
         return line;
@@ -173,15 +173,15 @@ public final class PrivateCache implements BackingStore {
         if (coherency == CacheCoherency.NONE) return;
 
         if (coherency == CacheCoherency.SNOOP) {
-            for (PrivateCache peer : CACHES.values()) {
+            for (L1Cache peer : CACHES.values()) {
                 if (peer != this) peer.invalidateLocal(blockAddress);
             }
         } else {
-            Map<Integer, MESICacheLine> sharers = DIRECTORY.get(blockAddress);
+            Map<Integer, L12Line> sharers = DIRECTORY.get(blockAddress);
             if (sharers != null) {
-                for (Map.Entry<Integer, MESICacheLine> entry : sharers.entrySet()) {
+                for (Map.Entry<Integer, L12Line> entry : sharers.entrySet()) {
                     if (entry.getKey() != hardId) {
-                        PrivateCache peer = CACHES.get(entry.getKey());
+                        L1Cache peer = CACHES.get(entry.getKey());
                         if (peer != null) peer.invalidateLocal(blockAddress);
                     }
                 }
@@ -192,14 +192,14 @@ public final class PrivateCache implements BackingStore {
     }
 
     private void invalidateLocal(long blockAddress) {
-        MESICacheLine line = lines.get(blockAddress);
+        L12Line line = lines.get(blockAddress);
         if (line != null) {
             line.state = MESI.INVALID;
             unregisterDirectoryLine(blockAddress);
         }
     }
 
-    private void registerDirectoryLine(long blockAddress, MESICacheLine line) {
+    private void registerDirectoryLine(long blockAddress, L12Line line) {
         if (coherency != CacheCoherency.DIR || line == null) return;
         DIRECTORY.computeIfAbsent(blockAddress, ignored -> new HashMap<>())
                 .put(hardId, line);
@@ -207,7 +207,7 @@ public final class PrivateCache implements BackingStore {
 
     private void unregisterDirectoryLine(long blockAddress) {
         if (coherency != CacheCoherency.DIR) return;
-        Map<Integer, MESICacheLine> sharers = DIRECTORY.get(blockAddress);
+        Map<Integer, L12Line> sharers = DIRECTORY.get(blockAddress);
         if (sharers != null) {
             sharers.remove(hardId);
             if (sharers.isEmpty()) DIRECTORY.remove(blockAddress);
@@ -217,8 +217,8 @@ public final class PrivateCache implements BackingStore {
     private void evictIfFull() {
         if (lines.size() < capacityLines) return;
 
-        MESICacheLine victim = null;
-        for (MESICacheLine candidate : lines.values()) {
+        L12Line victim = null;
+        for (L12Line candidate : lines.values()) {
             if (candidate.state == MESI.INVALID) {
                 victim = candidate;
                 break;
@@ -239,7 +239,7 @@ public final class PrivateCache implements BackingStore {
         lines.remove(victim.blockAddress);
     }
 
-    private boolean isEarlierVictim(MESICacheLine candidate, MESICacheLine current) {
+    private boolean isEarlierVictim(L12Line candidate, L12Line current) {
         return switch (evictionPolicy) {
             case FIFO -> candidate.loadedAt < current.loadedAt;
             case LRU -> candidate.lastUsed < current.lastUsed;
@@ -247,7 +247,7 @@ public final class PrivateCache implements BackingStore {
         };
     }
 
-    private void touch(MESICacheLine line) {
+    private void touch(L12Line line) {
         line.frequency++;
         line.lastUsed = ++clock;
     }
@@ -265,7 +265,7 @@ public final class PrivateCache implements BackingStore {
     /** Call when a hart/cache is destroyed, to avoid retaining its cache. */
     public void close() {
         synchronized (BUS_LOCK) {
-            for (MESICacheLine line : lines.values()) {
+            for (L12Line line : lines.values()) {
                 if (line.state == MESI.MODIFIED) {
                     backingStore.write(line.blockAddress, line.data);
                 }
@@ -276,25 +276,25 @@ public final class PrivateCache implements BackingStore {
         }
     }
 
-    private void updateOtherCopies(long blockAddress, MESICacheLine source) {
+    private void updateOtherCopies(long blockAddress, L12Line source) {
         if (coherency == CacheCoherency.NONE) {
             return;
         }
 
         if (coherency == CacheCoherency.SNOOP) {
-            for (PrivateCache peer : CACHES.values()) {
+            for (L1Cache peer : CACHES.values()) {
                 if (peer != this) {
                     updatePeerLine(peer, blockAddress, source.data);
                 }
             }
         } else if (coherency == CacheCoherency.DIR) {
-            Map<Integer, MESICacheLine> sharers = DIRECTORY.get(blockAddress);
+            Map<Integer, L12Line> sharers = DIRECTORY.get(blockAddress);
             if (sharers != null) {
                 for (Integer peerId : sharers.keySet()) {
                     if (peerId == hardId) {
                         continue;
                     }
-                    PrivateCache peer = CACHES.get(peerId);
+                    L1Cache peer = CACHES.get(peerId);
                     if (peer != null) {
                         updatePeerLine(peer, blockAddress, source.data);
                     }
@@ -306,8 +306,8 @@ public final class PrivateCache implements BackingStore {
         registerDirectoryLine(blockAddress, source);
     }
 
-    private void updatePeerLine(PrivateCache peer, long blockAddress, byte[] data) {
-        MESICacheLine peerLine = peer.lines.get(blockAddress);
+    private void updatePeerLine(L1Cache peer, long blockAddress, byte[] data) {
+        L12Line peerLine = peer.lines.get(blockAddress);
         if (peerLine != null && peerLine.state != MESI.INVALID) {
             System.arraycopy(data, 0, peerLine.data, 0, blockSize);
             peerLine.state = MESI.SHARED;

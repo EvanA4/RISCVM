@@ -1,10 +1,11 @@
 package net.eabbott.riscvm.machine.memory;
 
-import net.eabbott.riscvm.machine.CSRFile;
+import net.eabbott.riscvm.machine.memory.cache.L2Cache;
+import net.eabbott.riscvm.machine.register.CSRFile;
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.context.Context;
-import net.eabbott.riscvm.machine.memory.cache.PrivateCache;
-import net.eabbott.riscvm.machine.memory.cache.PublicCache;
+import net.eabbott.riscvm.machine.VirtualMachine;
+import net.eabbott.riscvm.machine.memory.cache.L1Cache;
 import net.eabbott.riscvm.machine.memory.virtual.AccessType;
 import net.eabbott.riscvm.machine.memory.virtual.MMU;
 
@@ -12,23 +13,25 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 public final class MemoryManager {
-    public static final ConcurrentMap<Integer, PrivateCache> L1_CACHES =
+    public static final ConcurrentMap<Integer, L1Cache> L1_CACHES =
             new ConcurrentHashMap<>();
-    public static final ConcurrentMap<Integer, PrivateCache> L2_CACHES =
+    public static final ConcurrentMap<Integer, L2Cache> L2_CACHES =
             new ConcurrentHashMap<>();
 
     public final MMU mmu;
     public final RAM ram;
     public final Hart hart;
-    public final PrivateCache l1;
+    public final L1Cache l1;
 
-    public MemoryManager(Hart hart, MMU mmu, RAM sharedRam, PublicCache sharedL3, Context context) {
+    public MemoryManager(Hart hart, Context context) {
+        VirtualMachine machine = VirtualMachine.getInstance();
+
         this.hart = hart;
-        this.mmu = mmu;
-        this.ram = sharedRam;
+        this.mmu = new MMU(hart);
+        this.ram = machine.ram;
 
-        PrivateCache l2 = new PrivateCache(context.cacheCoherency, context.l2Cache, hart.id, sharedL3);
-        this.l1 = new PrivateCache(context.cacheCoherency, context.l1Cache, hart.id, l2);
+        L2Cache l2 = new L2Cache(context.cacheCoherency, context.l2Cache, hart.id, machine.l3);
+        this.l1 = new L1Cache(context.cacheCoherency, context.l1Cache, hart.id, l2);
 
         L1_CACHES.put(hart.id, l1);
         L2_CACHES.put(hart.id, l2);

@@ -11,17 +11,17 @@ import java.util.Objects;
 /**
  * A block-based cache shared by all harts. It has no cache-coherence protocol.
  */
-public final class PublicCache implements BackingStore {
+public final class L3Cache implements BackingStore {
     private final int blockSize;
     private final int capacityLines;
     private final BackingStore backingStore;
     private final CacheEvictionPolicy evictionPolicy;
     private final boolean writeBack;
 
-    private final Map<Long, SharedCacheLine> lines = new HashMap<>();
+    private final Map<Long, L3Line> lines = new HashMap<>();
     private long clock;
 
-    public PublicCache(CacheContext context, BackingStore backingStore) {
+    public L3Cache(CacheContext context, BackingStore backingStore) {
         Objects.requireNonNull(context, "context");
         this.backingStore = Objects.requireNonNull(backingStore, "backingStore");
 
@@ -48,7 +48,7 @@ public final class PublicCache implements BackingStore {
             int offset = (int) (currentAddress - blockAddress);
             int count = Math.min(size - copied, blockSize - offset);
 
-            SharedCacheLine line = getOrLoad(blockAddress);
+            L3Line line = getOrLoad(blockAddress);
             touch(line);
             System.arraycopy(line.data, offset, result, copied, count);
             copied += count;
@@ -69,7 +69,7 @@ public final class PublicCache implements BackingStore {
             int offset = (int) (currentAddress - blockAddress);
             int count = Math.min(data.length - copied, blockSize - offset);
 
-            SharedCacheLine line = getOrLoad(blockAddress);
+            L3Line line = getOrLoad(blockAddress);
             touch(line);
             System.arraycopy(data, copied, line.data, offset, count);
 
@@ -84,8 +84,8 @@ public final class PublicCache implements BackingStore {
         }
     }
 
-    private SharedCacheLine getOrLoad(long blockAddress) {
-        SharedCacheLine line = lines.get(blockAddress);
+    private L3Line getOrLoad(long blockAddress) {
+        L3Line line = lines.get(blockAddress);
         if (line != null) {
             return line;
         }
@@ -98,7 +98,7 @@ public final class PublicCache implements BackingStore {
                     "Backing store returned an invalid cache block.");
         }
 
-        line = new SharedCacheLine(blockAddress, data, ++clock);
+        line = new L3Line(blockAddress, data, ++clock);
         lines.put(blockAddress, line);
         return line;
     }
@@ -108,8 +108,8 @@ public final class PublicCache implements BackingStore {
             return;
         }
 
-        SharedCacheLine victim = null;
-        for (SharedCacheLine candidate : lines.values()) {
+        L3Line victim = null;
+        for (L3Line candidate : lines.values()) {
             if (victim == null || isEarlierVictim(candidate, victim)) {
                 victim = candidate;
             }
@@ -123,7 +123,7 @@ public final class PublicCache implements BackingStore {
         lines.remove(victim.blockAddress);
     }
 
-    private void writeBackIfDirty(SharedCacheLine line) {
+    private void writeBackIfDirty(L3Line line) {
         if (line.dirty) {
             backingStore.write(line.blockAddress, line.data);
             line.dirty = false;
@@ -131,7 +131,7 @@ public final class PublicCache implements BackingStore {
     }
 
     private boolean isEarlierVictim(
-            SharedCacheLine candidate, SharedCacheLine current) {
+            L3Line candidate, L3Line current) {
         return switch (evictionPolicy) {
             case FIFO -> candidate.loadedAt < current.loadedAt;
             case LRU -> candidate.lastUsed < current.lastUsed;
@@ -139,7 +139,7 @@ public final class PublicCache implements BackingStore {
         };
     }
 
-    private void touch(SharedCacheLine line) {
+    private void touch(L3Line line) {
         line.frequency++;
         line.lastUsed = ++clock;
     }

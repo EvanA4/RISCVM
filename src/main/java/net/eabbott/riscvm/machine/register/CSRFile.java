@@ -1,4 +1,7 @@
-package net.eabbott.riscvm.machine;
+package net.eabbott.riscvm.machine.register;
+
+import net.eabbott.riscvm.context.Context;
+import net.eabbott.riscvm.machine.VirtualMachine;
 
 /*
 * A collection of every CSR for RISCV.
@@ -21,12 +24,14 @@ public class CSRFile {
     private int instret;
     private int instretH;
 
-    public CSRFile(int mHartID) {
+    private final Context context;
+
+    public CSRFile(int mHartID, Context context) {
+        this.context = context;
         this.mHartID = mHartID;
 
         // Set the satp CSR to zero if the MMU is not allowed
-        VirtualMachine vm = VirtualMachine.getInstance();
-        if (!vm.context.allowMMU) {
+        if (!context.allowMMU) {
             this.satp = 0;
         }
     }
@@ -37,7 +42,7 @@ public class CSRFile {
     public int read(int csr) {
         switch (csr) {
             case M_HART_ID -> { return this.mHartID; }
-            case SATP -> { return this.satp; }
+            case SATP -> { return context.allowMMU ? this.satp : 0; }
             case CYCLE -> { return this.time; }
             case CYCLE_H -> { return this.timeH; }
             case TIME -> { return this.cycle; }

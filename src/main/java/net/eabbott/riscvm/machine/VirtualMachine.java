@@ -2,7 +2,11 @@ package net.eabbott.riscvm.machine;
 
 import net.eabbott.riscvm.context.Context;
 import net.eabbott.riscvm.machine.memory.RAM;
+import net.eabbott.riscvm.machine.memory.cache.L3Cache;
+import net.eabbott.riscvm.machine.memory.virtual.TLB;
 import net.eabbott.riscvm.util.Nullable;
+
+import java.io.IOException;
 
 /*
 * The core virtual machine class, with multiple-hart capacity.
@@ -16,12 +20,19 @@ public class VirtualMachine {
     public Context context;
     public VMClock clock;
     public RAM ram;
+    public L3Cache l3;
+    public TLB tlb;
 
     public static @Nullable VirtualMachine create(Context context) {
         instance = new VirtualMachine();
         instance.context = context;
         instance.ram = new RAM(context.ramSize);
-        if (!instance.ram.populate(context.elf)) {
+        instance.l3 = new L3Cache(context.l3Cache, instance.ram);
+        instance.tlb = new TLB(context.numTLBSlots, context.tlbEviction);;
+
+        try {
+            instance.ram.populate(context.elf);
+        } catch (IOException e) {
             IO.println("Failed to populate RAM with ELF data.");
             return null;
         }

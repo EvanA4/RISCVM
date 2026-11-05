@@ -3,6 +3,7 @@ package net.eabbott.riscvm.machine.stage;
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.machine.HartStatus;
 import net.eabbott.riscvm.machine.VirtualMachine;
+import net.eabbott.riscvm.machine.memory.virtual.AccessType;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.util.VMLogger;
 
@@ -34,7 +35,7 @@ public class FetchStage extends AbstractStage {
         this.hart.programCounter = nextPC == -1 ? currentPC + 4 : nextPC;
 
         // Load raw instruction into new instruction register
-        byte[] rawInstruction = this.vm.ram.read(currentPC, 4);
+        byte[] rawInstruction = this.hart.memman.read(currentPC, 4, AccessType.FETCH);
         byte[] flipped = ByteBuffer.wrap(rawInstruction).flip().array();
         this.nextReg.setInst(flipped);
         this.nextReg.setPC(currentPC);

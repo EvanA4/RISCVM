@@ -1,19 +1,20 @@
 package net.eabbott.riscvm.machine.memory.virtual;
 
-import net.eabbott.riscvm.context.Context;
-import net.eabbott.riscvm.machine.CSRFile;
-import net.eabbott.riscvm.machine.memory.MemoryManager;
-import net.eabbott.riscvm.machine.memory.RAM;
+import net.eabbott.riscvm.machine.register.CSRFile;
+import net.eabbott.riscvm.machine.Hart;
+import net.eabbott.riscvm.machine.VirtualMachine;
 
 public final class MMU {
     private static final long ADDRESS_MASK = 0xFFFF_FFFFL;
     private static final long PPN_MASK = 0x3FFFFFL;
     private final TLB tlb;
-    private final MemoryManager memman;
+    private final VirtualMachine machine;
+    private final Hart hart;
 
-    public MMU(MemoryManager memman, Context context) {
-        this.memman = memman;
-        this.tlb = new TLB(context.numTLBSlots, context.tlbEviction);
+    public MMU(Hart hart) {
+        this.hart = hart;
+        this.machine = VirtualMachine.getInstance();
+        this.tlb = this.machine.tlb;
     }
 
     /**
@@ -53,7 +54,7 @@ public final class MMU {
     }
 
     private TLBEntry walkPageTable(long va, AccessType access) throws MemoryFault {
-        long currentSatp = memman.hart.csrFile.read(CSRFile.SATP);
+        long currentSatp = this.hart.csrFile.read(CSRFile.SATP);
 
         long rootPpn = currentSatp & PPN_MASK;
         int vpn1 = (int) ((va >>> 22) & 0x3FF);
@@ -115,7 +116,7 @@ public final class MMU {
     private int readPte(long va, long pteAddress) {
         checkPhysicalBounds(va, pteAddress, 4);
         try {
-            byte[] word = memman.ram.read(pteAddress, 4);
+            byte[] word = this.machine.ram.read(pteAddress, 4);
             return (word[0] & 0xFF)
                 | ((word[1] & 0xFF) << 8)
                 | ((word[2] & 0xFF) << 16)
@@ -143,7 +144,7 @@ public final class MMU {
     }
 
     private void checkPhysicalBounds(long va, long pa, int sizeBytes) {
-        long ramSize = memman.ram.length();
+        long ramSize = this.machine.ram.length();
 
         // The subtraction form avoids overflow in pa + sizeBytes.
         if (pa < 0 || pa >= ramSize || sizeBytes > ramSize - pa) {

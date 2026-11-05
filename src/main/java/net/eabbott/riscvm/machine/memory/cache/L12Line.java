@@ -1,17 +1,17 @@
 package net.eabbott.riscvm.machine.memory.cache;
 
-public class SharedCacheLine {
+public class L12Line {
     final long blockAddress;
     final byte[] data;
-    boolean dirty;
+    MESI state;
     long frequency;
     final long loadedAt;
     long lastUsed;
 
-    SharedCacheLine(long blockAddress, byte[] data, long timestamp) {
+    L12Line(long blockAddress, byte[] data, MESI state, long timestamp) {
         this.blockAddress = blockAddress;
         this.data = data;
-        this.dirty = false;
+        this.state = state;
         this.frequency = 1;
         this.loadedAt = timestamp;
         this.lastUsed = timestamp;
