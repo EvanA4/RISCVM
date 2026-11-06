@@ -82,10 +82,12 @@ public class VirtualMachine {
 }
 
 /*
-* load-use hazard
-* CSR register file, update variables each clock tick on falling edge?
 * LOAD
+* missing ALU operations from part-4 miscommunication
 * WRITE
+* CSR register file, update variables each clock tick on falling edge?
+* forwarding
 * Parked harts need to freeze
 * stall when cache miss
+* Ending the program (all harts parked OR exit called)
 * */
