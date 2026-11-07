@@ -82,12 +82,10 @@ public class VirtualMachine {
 }
 
 /*
-* LOAD
-* missing ALU operations from part-4 miscommunication
+* MEMORY (especially AMO ops) (which cache is the top? what if L1 is disabled?) (stall when cache miss)
 * WRITE
 * CSR register file, update variables each clock tick on falling edge?
 * forwarding
 * Parked harts need to freeze
-* stall when cache miss
 * Ending the program (all harts parked OR exit called)
 * */

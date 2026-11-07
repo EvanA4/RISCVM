@@ -9,9 +9,8 @@ import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.util.BinaryUtil;
 import net.eabbott.riscvm.util.VMLogger;
 
-/*
- * The pipeline memory stage.
- * */
+import java.util.Arrays;
+
 public class MemoryStage extends AbstractStage {
     private final VMLogger logger = VMLogger.getInstance();
     private final Hart hart;
@@ -33,7 +32,6 @@ public class MemoryStage extends AbstractStage {
         byte[] inst = prevReg.getInst();
         if (inst.length == 0) return;
 
-        // Pass through the fields needed by writeback, replacing result for loads.
         nextReg.setPC(prevReg.getPC());
         nextReg.setInst(inst);
         nextReg.setPredictedNextPc(prevReg.getPredictedNextPc());
@@ -62,9 +60,9 @@ public class MemoryStage extends AbstractStage {
             if (hart.status != HartStatus.RUNNING) return;
 
             byte[] data = hart.memman.read(address, size, AccessType.LOAD);
-            int value = littleEndianInt(data);
-            if (size == 1) value = (byte) value;       // LB: sign-extend
-            else if (size == 2) value = (short) value; // LH: sign-extend
+            int value = BinaryUtil.intFromBytesLE(data, 0, size);
+            if (size == 1) value = (byte) value;
+            else if (size == 2) value = (short) value;
             nextReg.setResult(value);
 
         } else if (opcode == Opcode.STORE) {
@@ -79,54 +77,42 @@ public class MemoryStage extends AbstractStage {
             };
             if (hart.status != HartStatus.RUNNING) return;
 
-            hart.memman.write(address, littleEndianBytes(prevReg.getStrval(), size),
-                    AccessType.STORE);
+            hart.memman.write(
+                    address,
+                    Arrays.copyOfRange(BinaryUtil.bytesFromIntLE(prevReg.getStrval()), 0, size),
+                    AccessType.STORE
+            );
 
         } else if (opcode == Opcode.AMO) {
             AMOOp operation = AMOOp.fromByte(prevReg.getAMOOp());
-            int oldValue = littleEndianInt(
-                    hart.memman.read(address, 4, AccessType.AMO));
             int operand = prevReg.getStrval();
-            int newValue;
 
-            switch (operation) {
-                case LR -> {
-                    // LR returns the loaded word. Reservation tracking is not
-                    // represented by the supplied MemoryManager API.
-                    nextReg.setResult(oldValue);
-                    return;
-                }
-                case SC -> {
-                    // Without reservation tracking, this treats SC as a store.
-                    newValue = operand;
-                }
-                case SWAP -> newValue = operand;
-                case ADD  -> newValue = oldValue + operand;
-                case XOR  -> newValue = oldValue ^ operand;
-                case AND  -> newValue = oldValue & operand;
-                case OR   -> newValue = oldValue | operand;
-                case MIN  -> newValue = Math.min(oldValue, operand);
-                case MAX  -> newValue = Math.max(oldValue, operand);
-                case MINU -> newValue =
-                        Integer.compareUnsigned(oldValue, operand) <= 0
-                                ? oldValue : operand;
-                case MAXU -> newValue =
-                        Integer.compareUnsigned(oldValue, operand) >= 0
-                                ? oldValue : operand;
-                default -> {
-                    hart.status = HartStatus.ILLEGAL_INSTRUCTION;
-                    return;
-                }
+            if (operation == AMOOp.LR) {
+                byte[] data = hart.memman.read(address, 4, AccessType.AMO);
+                nextReg.setResult(BinaryUtil.intFromBytesLE(data, 0, 4));
+                return;
             }
 
-            hart.memman.write(address, littleEndianBytes(newValue, 4),
-                    AccessType.AMO);
+            int oldValue = hart.memman.rmw(address, prev -> switch (operation) {
+                case SC, SWAP -> operand;
+                case ADD -> prev + operand;
+                case XOR -> prev ^ operand;
+                case AND -> prev & operand;
+                case OR  -> prev | operand;
+                case MIN -> Math.min(prev, operand);
+                case MAX -> Math.max(prev, operand);
+                case MINU -> Integer.compareUnsigned(prev, operand) <= 0
+                        ? prev : operand;
+                case MAXU -> Integer.compareUnsigned(prev, operand) >= 0
+                        ? prev : operand;
+                default -> throw new IllegalArgumentException(
+                        "Unsupported AMO operation: " + operation
+                );
+            });
 
-            if (operation == AMOOp.SC) {
-                nextReg.setResult(0); // success; full reservation semantics need tracking
-            } else {
-                nextReg.setResult(oldValue);
-            }
+            // SC is currently treated as an unconditional store. Proper SC
+            // success/failure requires reservation tracking.
+            nextReg.setResult(operation == AMOOp.SC ? 0 : oldValue);
         }
     }
 
@@ -136,21 +122,5 @@ public class MemoryStage extends AbstractStage {
 
         logger.log("Running falling edge for memory stage for hart #%d", hart.id);
         hart.pipelineRegisters[3].tick();
-    }
-
-    private static int littleEndianInt(byte[] data) {
-        int value = 0;
-        for (int i = 0; i < data.length; i++) {
-            value |= (data[i] & 0xff) << (8 * i);
-        }
-        return value;
-    }
-
-    private static byte[] littleEndianBytes(int value, int size) {
-        byte[] data = new byte[size];
-        for (int i = 0; i < size; i++) {
-            data[i] = (byte) (value >>> (8 * i));
-        }
-        return data;
     }
 }

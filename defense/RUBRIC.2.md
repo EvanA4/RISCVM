@@ -119,7 +119,7 @@ Multi-byte fields treated as little-endian; loader fails safely on malformed inp
 
 I believe I have earned a full score for this category at step F1.
 
-At `util/BinaryUtil.java:42-49`, an `intFromBytes` function is defined to parse bytes in little-endian format and return an `int`. At `util/BinaryUtil.java:54-61`, a `longFromBytes` function is defined to parse bytes in little-endian format and return a `long`. This latter function is only called at`context/elf/ELFHeader.java:44` for the `e_padding` field, though.
+At `util/BinaryUtil.java:42-49`, an `intFromBytesLE` function is defined to parse bytes in little-endian format and return an `int`. At `util/BinaryUtil.java:54-61`, a `longFromBytesLE` function is defined to parse bytes in little-endian format and return a `long`. This latter function is only called at`context/elf/ELFHeader.java:44` for the `e_padding` field, though.
 
 At any point in parsing or validating the ELF header and program headers, an exception may be thrown. To handle these, exceptions are caught at `context/Context.java:49` to exit the program gracefully; a `null` value is returned by the `Context` initialization function. `Main.java:14` checks for this situation and returns safely.
 

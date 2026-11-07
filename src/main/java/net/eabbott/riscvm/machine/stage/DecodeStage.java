@@ -44,6 +44,8 @@ public class DecodeStage extends AbstractStage {
                 default -> ALUOp.None;
             };
             case 0b001 -> funct7 == 0 ? ALUOp.LeftShift : ALUOp.None;
+            case 0b010 -> funct7 == 0 ? ALUOp.SLT : ALUOp.None;
+            case 0b011 -> funct7 == 0 ? ALUOp.SLTU : ALUOp.None;
             case 0b100 -> funct7 == 0 ? ALUOp.Xor : ALUOp.None;
             case 0b101 -> switch (funct7) {
                 case 0x00 -> ALUOp.RightShiftL;
@@ -89,42 +91,75 @@ public class DecodeStage extends AbstractStage {
 
         // Case-by-case processing
         switch (opcode) {
-            case LOAD, SYSTEM -> {
+            case LOAD -> {
                 logger.log("Processing type I: %s", opcode);
+
                 int imm = BinaryUtil.intFromBits(instruction, 20, 12, true);
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
                 this.nextReg.setRd((byte) rd);
                 this.nextReg.setDisp(imm);
+                this.nextReg.setALUOp(ALUOp.Add.toByte());
 
-                // Parse I-type ALUOp
-                if (opcode == Opcode.LOAD) { // Force LOAD to ALUOp ADD
-                    this.nextReg.setALUOp(ALUOp.Add.toByte());
-                    switch (funct3) {
-                        case (0b000) -> this.nextReg.setMemop((byte) 0b001);
-                        case (0b001) -> this.nextReg.setMemop((byte) 0b010);
-                        case (0b010) -> this.nextReg.setMemop((byte) 0b011);
-                        default -> {
-                            this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
-                            return;
-                        }
+                // Parse memop
+                switch (funct3) {
+                    case 0b000 -> this.nextReg.setMemop((byte) 0b001); // Byte
+                    case 0b001 -> this.nextReg.setMemop((byte) 0b010); // Half-word
+                    case 0b010 -> this.nextReg.setMemop((byte) 0b011); // Word
+                    default -> {
+                        this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                        return;
+                    }
+                }
+            }
+            case SYSTEM -> {
+                logger.log("Processing type I: %s", opcode);
+
+                int imm = BinaryUtil.intFromBits(instruction, 20, 12, false);
+
+                if (funct3 == 0b000) {
+                    // ECALL
+                    if (instruction[0] == 0x73
+                            && instruction[1] == 0x00
+                            && instruction[2] == 0x00
+                            && instruction[3] == 0x00) {
+                        this.nextReg.setRd((byte) 0);
+                        this.nextReg.setMemop((byte) 0);
+                        this.nextReg.setALUOp(ALUOp.None.toByte());
+                        break;
                     }
 
-                } else { // Parse others normally
-                    ALUOp parsed = switch (funct3) {
-                        case 0b000 -> ALUOp.Add;
-                        case 0b001 -> ALUOp.LeftShift;
-                        case 0b100 -> ALUOp.Xor;
-                        case 0b101 -> ALUOp.RightShiftL;
-                        case 0b110 -> ALUOp.Or;
-                        case 0b111 -> ALUOp.And;
-                        default -> ALUOp.None;
-                    };
-                    if (parsed == ALUOp.RightShiftL) {
-                        if ((imm >> 5) == 0b0100000) parsed = ALUOp.RightShiftA;
-                        else if ((imm >> 5) != 0) parsed = ALUOp.None;
+                    // SFENCE.VMA encoding: funct7=0b0001001, rd=0, funct3=0, rs1 and rs2 are operands
+                    if (funct7 == 0b0001001 && rd == 0) {
+                        this.nextReg.setLeft(this.hart.registers.read(rs1));
+                        this.nextReg.setRight(this.hart.registers.read(rs2));
+                        this.nextReg.setRd((byte) 0);
+                        this.nextReg.setMemop((byte) 0);
+                        this.nextReg.setALUOp(ALUOp.None.toByte());
+                        break;
                     }
-                    if (parsed == ALUOp.None) {
+
+                    this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                    return;
+                }
+
+                // CSR instructions
+                switch (funct3) {
+                    case 0b001, // CSRRW
+                         0b010, // CSRRS
+                         0b011, // CSRRC
+                         0b101, // CSRRWI
+                         0b110, // CSRRSI
+                         0b111  // CSRRCI
+                            -> {
+                        this.nextReg.setLeft(this.hart.registers.read(rs1));
+                        this.nextReg.setRight(imm);
+                        this.nextReg.setRd((byte) rd);
+                        this.nextReg.setDisp(imm);
+                        this.nextReg.setMemop((byte) 0);
+                        this.nextReg.setALUOp(ALUOp.None.toByte());
+                    }
+                    default -> {
                         this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
                         return;
                     }
@@ -155,6 +190,8 @@ public class DecodeStage extends AbstractStage {
                 ALUOp parsed = switch (funct3) {
                     case 0b000 -> ALUOp.Add;
                     case 0b001 -> ALUOp.LeftShift;
+                    case 0b010 -> ALUOp.SLT;
+                    case 0b011 -> ALUOp.SLTU;
                     case 0b100 -> ALUOp.Xor;
                     case 0b101 -> ALUOp.RightShiftL;
                     case 0b110 -> ALUOp.Or;

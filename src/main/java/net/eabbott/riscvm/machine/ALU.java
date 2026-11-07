@@ -20,6 +20,17 @@ public final class ALU {
             case Add -> executeAdd(a, b);
             case Sub -> executeSub(a, b);
 
+            case SLT -> {
+                executeSub(a, b);
+                result = (negative != overflow) ? 1 : 0;
+                updateNegativeAndZero();
+            }
+            case SLTU -> {
+                executeSub(a, b);
+                result = carry ? 0 : 1;
+                updateNegativeAndZero();
+            }
+
             case Mul -> result = a * b;
 
             case Div -> result = (b == 0)

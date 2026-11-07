@@ -1,10 +1,7 @@
 package net.eabbott.riscvm.util;
 
-import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
-
 public class BinaryUtil {
-    /*
+    /**
     * Sign extends an integer at a given index. We're all adults here, right?
     * */
     public static int sext(int src, int idx) {
@@ -23,7 +20,7 @@ public class BinaryUtil {
         return src | mask;
     }
 
-    /*
+    /**
      * Reads "size" bits at "offset" into an integer
      * */
     public static int intFromBits(byte[] bytes, int offset, int size, boolean extend) {
@@ -35,10 +32,10 @@ public class BinaryUtil {
         return extend ? sext(output, size - 1) : output;
     }
 
-    /*
-    * Reads "size" bytes at "offset" into an integer
+    /**
+    * Reads "size" bytes at "offset" into an integer in little endian format.
     * */
-    public static int intFromBytes(byte[] bytes, int offset, int size) {
+    public static int intFromBytesLE(byte[] bytes, int offset, int size) {
         int output = 0;
         for (int i = offset + size - 1; i >= offset; --i) {
             output <<= 8;
@@ -47,10 +44,21 @@ public class BinaryUtil {
         return output;
     }
 
-    /*
-     * Reads "size" bytes at "offset" into a long
+    /**
+     * Converts integer to byte array in little endian format.
+     */
+    public static byte[] bytesFromIntLE(int num) {
+        byte[] output = new byte[4];
+        for (int i = 0; i < 4; ++i) {
+            output[i] = (byte) (num >>> (8 * i));
+        }
+        return output;
+    }
+
+    /**
+     * Reads "size" bytes at "offset" into a long in little endian format.
      * */
-    public static long longFromBytes(byte[] bytes, int offset, int size) {
+    public static long longFromBytesLE(byte[] bytes, int offset, int size) {
         long output = 0;
         for (int i = offset + size - 1; i >= offset; --i) {
             output <<= 8;

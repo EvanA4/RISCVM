@@ -21,14 +21,14 @@ public class ELFProgramHeader {
         reader.seek(offset);
         reader.read(rawHeader);
 
-        programHeader.type = BinaryUtil.intFromBytes(rawHeader, 0, 4);
-        programHeader.offset = BinaryUtil.intFromBytes(rawHeader, 4, 4);
-        programHeader.vaddr = BinaryUtil.intFromBytes(rawHeader, 8, 4);
-        programHeader.paddr = BinaryUtil.intFromBytes(rawHeader, 12, 4);
-        programHeader.filesz = BinaryUtil.intFromBytes(rawHeader, 16, 4);
-        programHeader.memsz = BinaryUtil.intFromBytes(rawHeader, 20, 4);
-        programHeader.flags = BinaryUtil.intFromBytes(rawHeader, 24, 4);
-        programHeader.align = BinaryUtil.intFromBytes(rawHeader, 28, 4);
+        programHeader.type = BinaryUtil.intFromBytesLE(rawHeader, 0, 4);
+        programHeader.offset = BinaryUtil.intFromBytesLE(rawHeader, 4, 4);
+        programHeader.vaddr = BinaryUtil.intFromBytesLE(rawHeader, 8, 4);
+        programHeader.paddr = BinaryUtil.intFromBytesLE(rawHeader, 12, 4);
+        programHeader.filesz = BinaryUtil.intFromBytesLE(rawHeader, 16, 4);
+        programHeader.memsz = BinaryUtil.intFromBytesLE(rawHeader, 20, 4);
+        programHeader.flags = BinaryUtil.intFromBytesLE(rawHeader, 24, 4);
+        programHeader.align = BinaryUtil.intFromBytesLE(rawHeader, 28, 4);
 
         return programHeader;
     }
