@@ -88,13 +88,17 @@ public class MemoryStage extends AbstractStage {
             int operand = prevReg.getStrval();
 
             if (operation == AMOOp.LR) {
-                byte[] data = hart.memman.read(address, 4, AccessType.AMO);
-                nextReg.setResult(BinaryUtil.intFromBytesLE(data, 0, 4));
+                nextReg.setResult(hart.memman.loadReserved(address));
+                return;
+            }
+
+            if (operation == AMOOp.SC) {
+                nextReg.setResult(hart.memman.storeConditional(address, operand));
                 return;
             }
 
             int oldValue = hart.memman.rmw(address, prev -> switch (operation) {
-                case SC, SWAP -> operand;
+                case SWAP -> operand;
                 case ADD -> prev + operand;
                 case XOR -> prev ^ operand;
                 case AND -> prev & operand;
@@ -110,9 +114,8 @@ public class MemoryStage extends AbstractStage {
                 );
             });
 
-            // SC is currently treated as an unconditional store. Proper SC
-            // success/failure requires reservation tracking.
-            nextReg.setResult(operation == AMOOp.SC ? 0 : oldValue);
+            // RMW's write to result
+            nextReg.setResult(oldValue);
         }
     }
 

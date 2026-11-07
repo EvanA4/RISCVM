@@ -11,6 +11,7 @@ import net.eabbott.riscvm.machine.memory.virtual.MMU;
 import net.eabbott.riscvm.util.BinaryUtil;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.IntUnaryOperator;
@@ -29,7 +30,12 @@ public final class MemoryManager {
         Arrays.setAll(STRIPES, ignored -> new Object());
     }
 
-    // Get stripe lock from physical address
+    // LR reservations, one per hart
+    private static final ConcurrentMap<Integer, Long> RESERVATIONS =
+        new ConcurrentHashMap<>();
+
+    // Get stripe lock from physical address, based on SplitMix64
+    // https://rosettacode.org/wiki/Pseudo-random_numbers/Splitmix64
     private static Object getStripe(long physicalAddress) {
         long x = physicalAddress;
         x += 0x9e3779b97f4a7c15L;
@@ -72,9 +78,12 @@ public final class MemoryManager {
             address = this.mmu.translate(address, data.length, accessType);
 
         synchronized (getStripe(address)) {
+            invalidateReservations(address);
             l1.write(address, data);
         }
     }
+
+    // Atomic-relevant code below:
 
     public int rmw(long address, IntUnaryOperator func) {
         if (this.hart.csrFile.read(CSRFile.SATP) != 0)
@@ -82,8 +91,64 @@ public final class MemoryManager {
 
         synchronized (getStripe(address)) {
             int oldValue = BinaryUtil.intFromBytesLE(l1.read(address, 4), 0, 4);
+            invalidateReservations(address);
             l1.write(address, BinaryUtil.bytesFromIntLE(func.applyAsInt(oldValue)));
             return oldValue;
+        }
+    }
+
+    public int loadReserved(long address) {
+        long physicalAddress = translateAmoAddress(address);
+        checkWordAlignment(physicalAddress);
+
+        synchronized (getStripe(physicalAddress)) {
+            int value = BinaryUtil.intFromBytesLE(l1.read(physicalAddress, 4), 0, 4);
+            RESERVATIONS.put(hart.id, physicalAddress);
+            return value;
+        }
+    }
+
+    /**
+     * Attempts an SC.W. Returns 0 on success and 1 on failure.
+     */
+    public int storeConditional(long address, int value) {
+        long physicalAddress = translateAmoAddress(address);
+        checkWordAlignment(physicalAddress);
+
+        synchronized (getStripe(physicalAddress)) {
+            Long reservation = RESERVATIONS.remove(hart.id);
+
+            if (reservation == null || reservation.longValue() != physicalAddress) {
+                return 1;
+            }
+
+            invalidateReservations(physicalAddress);
+            l1.write(physicalAddress, BinaryUtil.bytesFromIntLE(value));
+            return 0;
+        }
+    }
+
+    private long translateAmoAddress(long address) {
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
+            return this.mmu.translate(address, 4, AccessType.AMO);
+        }
+        return address;
+    }
+
+    private static void checkWordAlignment(long address) {
+        if ((address & 0b11) != 0) {
+            throw new IllegalArgumentException("Misaligned atomic word access.");
+        }
+    }
+
+    /**
+     * Call while holding the stripe for physicalAddress.
+     */
+    private static void invalidateReservations(long physicalAddress) {
+        for (Map.Entry<Integer, Long> entry : RESERVATIONS.entrySet()) {
+            if (entry.getValue() == physicalAddress) {
+                RESERVATIONS.remove(entry.getKey(), entry.getValue());
+            }
         }
     }
 }
