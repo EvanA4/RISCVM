@@ -5,8 +5,6 @@ import net.eabbott.riscvm.context.cache.CacheEvictionPolicy;
 import net.eabbott.riscvm.machine.memory.BackingStore;
 
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -17,9 +15,7 @@ public final class L3Cache implements BackingStore {
     private static final ReentrantLock LOCK = new ReentrantLock();
     
     private final int blockSize;
-    private final int capacityLines;
     private final BackingStore backingStore;
-    private final CacheEvictionPolicy evictionPolicy;
     private final boolean writeBack;
 
     private final SimpleCacheData lines;
@@ -31,12 +27,10 @@ public final class L3Cache implements BackingStore {
 
         if (context.blockSize <= 0 || context.size < context.blockSize) {
             throw new IllegalArgumentException(
-                    "Cache size and block size must be positive.");
+                "Cache size and block size must be positive.");
         }
 
         this.blockSize = context.blockSize;
-        this.capacityLines = Math.toIntExact(context.size / context.blockSize);
-        this.evictionPolicy = Objects.requireNonNull(context.eviction, "eviction");
         this.writeBack = context.isWriteBack;
         this.lines = new SimpleCacheData(context);
     }
@@ -106,6 +100,15 @@ public final class L3Cache implements BackingStore {
         SimpleLine line = lines.read(blockAddress);
         if (line != null) {
             line.touch(++clock);
+
+            // Attempt write-through before writing to local cache, abort if process fails
+            if (!writeBack) {
+                byte[] newBlock = line.data.clone();
+                System.arraycopy(source, sourceOffset, newBlock, offset, count);
+                MemoryResult result = backingStore.write(line.blockAddress, newBlock);
+                if (result.shouldWait()) return new MemoryResult(true, null);
+            }
+
             System.arraycopy(source, sourceOffset, line.data, offset, count);
             return new MemoryResult(false, null);
         }
@@ -117,17 +120,19 @@ public final class L3Cache implements BackingStore {
 
     private void fetchBackingStore(long blockAddress) {
         // Evict if necessary
-        SimpleLine evicted = this.lines.evictIfFull(blockAddress);
-        if (evicted.dirty) {
-            backingStore.write(evicted.blockAddress, evicted.data);
+        SimpleLine victim = this.lines.findVictim(blockAddress);
+        if (victim != null && victim.dirty) {
+            // Try to write the dirty victim to backing store, abort process if stall requested
+            MemoryResult result = backingStore.write(victim.blockAddress, victim.data);
+            if (result.shouldWait()) return;
+
+            // If no stall requested, remove now-clean victim from cache
+            this.lines.evictBlock(victim.blockAddress);
         }
 
         // Then read from backing store
         MemoryResult result = backingStore.read(blockAddress, blockSize);
-        if (result == null || result.data().length != blockSize) {
-            throw new IllegalStateException(
-                "Backing store returned an invalid cache block.");
-        }
+        if (result.shouldWait()) return;
 
         // Finally, update local cache and request stall
         SimpleLine line = new SimpleLine(blockAddress, result.data(), ++clock);

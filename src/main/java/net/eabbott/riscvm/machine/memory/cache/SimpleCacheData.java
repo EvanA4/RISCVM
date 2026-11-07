@@ -100,17 +100,15 @@ public class SimpleCacheData {
     }
 
     /**
-     * Removes a line and returns its block address from the full, local cache.
+     * Finds a line for removal from a supposedly full, local cache.
      * This should only be called with both coherency and local locks held.
      * If the cache is not full, null is returned.
      * */
-    public SimpleLine evictIfFull(long block) {
+    public SimpleLine findVictim(long block) {
         if (this.context.ca.type == CacheAssociativityType.DIRECT_MAPPED) {
             int index = Math.floorMod(
                 Math.floorDiv(block, this.context.blockSize), this.daLines.size());
-            SimpleLine victim = daLines.get(index);
-            daLines.set(index, null);
-            return victim;
+            return daLines.get(index);
         }
 
         Map<Long, SimpleLine> map = null;
@@ -126,7 +124,7 @@ public class SimpleCacheData {
                 map = faLines;
                 maxSize = numLines;
             }
-        };
+        }
         if (map == null || map.size() < maxSize) return null;
 
         // Iterate through every line, preferring invalid lines over older lines
@@ -137,12 +135,29 @@ public class SimpleCacheData {
             }
         }
 
-        if (victim == null) {
-            throw new IllegalStateException("Cache has no evictable line.");
+        return victim;
+    }
+
+    /**
+     * Removes a line and returns its block address from the full, local cache.
+     * This should only be called with both coherency and local locks held and
+     * the backing store successfully wrote back the line (if it was dirty).
+     * If the cache is not full, null is returned.
+     * */
+    public void evictBlock(long block) {
+        if (this.context.ca.type == CacheAssociativityType.DIRECT_MAPPED) {
+            int index = Math.floorMod(
+                Math.floorDiv(block, this.context.blockSize), this.daLines.size());
+            daLines.set(index, null);
         }
 
-        map.remove(victim.blockAddress);
-
-        return victim;
+        switch (this.context.ca.type) {
+            case SET_ASSOC -> {
+                int index = Math.floorMod(
+                    Math.floorDiv(block, this.context.blockSize), this.saLines.size());
+                saLines.get(index).remove(block);
+            }
+            case FULL_ASSOC -> faLines.remove(block);
+        }
     }
 }
