@@ -4,21 +4,25 @@ import net.eabbott.riscvm.context.cache.CacheContext;
 import net.eabbott.riscvm.context.cache.CacheEvictionPolicy;
 import net.eabbott.riscvm.machine.memory.BackingStore;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * A block-based cache shared by all harts. It has no cache-coherence protocol.
  */
 public final class L3Cache implements BackingStore {
+    private static final ReentrantLock LOCK = new ReentrantLock();
+    
     private final int blockSize;
     private final int capacityLines;
     private final BackingStore backingStore;
     private final CacheEvictionPolicy evictionPolicy;
     private final boolean writeBack;
 
-    private final Map<Long, L3Line> lines = new HashMap<>();
+    private final SimpleCacheData lines;
     private long clock;
 
     public L3Cache(CacheContext context, BackingStore backingStore) {
@@ -34,123 +38,103 @@ public final class L3Cache implements BackingStore {
         this.capacityLines = Math.toIntExact(context.size / context.blockSize);
         this.evictionPolicy = Objects.requireNonNull(context.eviction, "eviction");
         this.writeBack = context.isWriteBack;
+        this.lines = new SimpleCacheData(context);
     }
 
     @Override
-    public synchronized byte[] read(long address, int size) {
-        checkRange(address, size);
-        byte[] result = new byte[size];
+    public MemoryResult read(long address, int size) {
+        if (LOCK.tryLock()) {
+            byte[] output = new byte[size];
+    
+            int copied = 0;
+            while (copied < size) {
+                long currentAddress = address + copied;
+                long blockAddress = blockAddress(currentAddress);
+                int offset = (int) (currentAddress - blockAddress);
+                int count = Math.min(size - copied, blockSize - offset);
+    
+                MemoryResult result = readBlockRange(blockAddress, offset, count);
+                if (result.shouldWait()) return new MemoryResult(true, null);
 
-        int copied = 0;
-        while (copied < size) {
-            long currentAddress = address + copied;
-            long blockAddress = blockAddress(currentAddress);
-            int offset = (int) (currentAddress - blockAddress);
-            int count = Math.min(size - copied, blockSize - offset);
-
-            L3Line line = getOrLoad(blockAddress);
-            touch(line);
-            System.arraycopy(line.data, offset, result, copied, count);
-            copied += count;
-        }
-
-        return result;
-    }
-
-    @Override
-    public synchronized void write(long address, byte[] data) {
-        Objects.requireNonNull(data, "data");
-        checkRange(address, data.length);
-
-        int copied = 0;
-        while (copied < data.length) {
-            long currentAddress = address + copied;
-            long blockAddress = blockAddress(currentAddress);
-            int offset = (int) (currentAddress - blockAddress);
-            int count = Math.min(data.length - copied, blockSize - offset);
-
-            L3Line line = getOrLoad(blockAddress);
-            touch(line);
-            System.arraycopy(data, copied, line.data, offset, count);
-
-            if (writeBack) {
-                line.dirty = true;
-            } else {
-                backingStore.write(blockAddress, line.data);
-                line.dirty = false;
+                System.arraycopy(result.data(), 0, output, copied, count);
+                copied += count;
             }
-
-            copied += count;
+    
+            return new MemoryResult(false, output);
         }
+        return new MemoryResult(true, null);
     }
 
-    private L3Line getOrLoad(long blockAddress) {
-        L3Line line = lines.get(blockAddress);
+    @Override
+    public synchronized MemoryResult write(long address, byte[] data) {
+        if (LOCK.tryLock()) {
+            Objects.requireNonNull(data, "data");
+
+            int copied = 0;
+            while (copied < data.length) {
+                long currentAddress = address + copied;
+                long blockAddress = blockAddress(currentAddress);
+                int offset = (int) (currentAddress - blockAddress);
+                int count = Math.min(data.length - copied, blockSize - offset);
+
+                MemoryResult result = writeBlockRange(blockAddress, offset, data, copied, count);
+                if (result.shouldWait()) return new MemoryResult(true, null);
+
+                copied += count;
+            }
+            return new MemoryResult(false, null);
+        }
+        return new MemoryResult(true, null);
+    }
+
+    private MemoryResult readBlockRange(long blockAddress, int offset, int count) {
+        // Attempt to read locally
+        SimpleLine line = lines.read(blockAddress);
         if (line != null) {
-            return line;
+            line.touch(++clock);
+            byte[] range = Arrays.copyOfRange(line.data, offset, offset + count);
+            return new MemoryResult(false, range);
         }
 
-        evictIfFull();
+        // Can't write locally, read from backing store :(
+        fetchBackingStore(blockAddress);
+        return new MemoryResult(true, null);
+    }
 
-        byte[] data = backingStore.read(blockAddress, blockSize);
-        if (data == null || data.length != blockSize) {
+    private MemoryResult writeBlockRange(long blockAddress, int offset, byte[] source, int sourceOffset, int count) {
+        // Attempt to write locally
+        SimpleLine line = lines.read(blockAddress);
+        if (line != null) {
+            line.touch(++clock);
+            System.arraycopy(source, sourceOffset, line.data, offset, count);
+            return new MemoryResult(false, null);
+        }
+
+        // Can't write locally, read from backing store :(
+        fetchBackingStore(blockAddress);
+        return new MemoryResult(true, null);
+    }
+
+    private void fetchBackingStore(long blockAddress) {
+        // Evict if necessary
+        SimpleLine evicted = this.lines.evictIfFull(blockAddress);
+        if (evicted.dirty) {
+            backingStore.write(evicted.blockAddress, evicted.data);
+        }
+
+        // Then read from backing store
+        MemoryResult result = backingStore.read(blockAddress, blockSize);
+        if (result == null || result.data().length != blockSize) {
             throw new IllegalStateException(
-                    "Backing store returned an invalid cache block.");
+                "Backing store returned an invalid cache block.");
         }
 
-        line = new L3Line(blockAddress, data, ++clock);
-        lines.put(blockAddress, line);
-        return line;
-    }
-
-    private void evictIfFull() {
-        if (lines.size() < capacityLines) {
-            return;
-        }
-
-        L3Line victim = null;
-        for (L3Line candidate : lines.values()) {
-            if (victim == null || isEarlierVictim(candidate, victim)) {
-                victim = candidate;
-            }
-        }
-
-        if (victim == null) {
-            throw new IllegalStateException("Cache has no evictable line.");
-        }
-
-        writeBackIfDirty(victim);
-        lines.remove(victim.blockAddress);
-    }
-
-    private void writeBackIfDirty(L3Line line) {
-        if (line.dirty) {
-            backingStore.write(line.blockAddress, line.data);
-            line.dirty = false;
-        }
-    }
-
-    private boolean isEarlierVictim(
-            L3Line candidate, L3Line current) {
-        return switch (evictionPolicy) {
-            case FIFO -> candidate.loadedAt < current.loadedAt;
-            case LRU -> candidate.lastUsed < current.lastUsed;
-            case LFU -> candidate.frequency < current.frequency;
-        };
-    }
-
-    private void touch(L3Line line) {
-        line.frequency++;
-        line.lastUsed = ++clock;
+        // Finally, update local cache and request stall
+        SimpleLine line = new SimpleLine(blockAddress, result.data(), ++clock);
+        lines.write(line);
     }
 
     private long blockAddress(long address) {
         return address - Math.floorMod(address, blockSize);
-    }
-
-    private static void checkRange(long address, int size) {
-        if (address < 0 || size < 0 || address > Long.MAX_VALUE - size) {
-            throw new IllegalArgumentException("Invalid memory range.");
-        }
     }
 }

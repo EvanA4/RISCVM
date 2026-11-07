@@ -1,0 +1,148 @@
+package net.eabbott.riscvm.machine.memory.cache;
+
+import net.eabbott.riscvm.context.cache.CacheAssociativityType;
+import net.eabbott.riscvm.context.cache.CacheContext;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class SimpleCacheData {
+    private final CacheContext context;
+    private final int numLines;
+    private Map<Long, SimpleLine> faLines = null;
+    private List<Map<Long, SimpleLine>> saLines = null;
+    private List<SimpleLine> daLines = null;
+
+    public SimpleCacheData(CacheContext context) {
+        this.context = context;
+        this.numLines = Math.toIntExact(context.size / context.blockSize);
+        switch (context.ca.type) {
+            case DIRECT_MAPPED -> {
+                this.daLines = new ArrayList<>(this.numLines);
+                for (int i = 0; i < this.numLines; ++i) this.daLines.add(null);
+            }
+            case SET_ASSOC -> {
+                this.saLines = new ArrayList<>();
+                for (int i = 0; i < this.numLines / context.ca.ways; ++i) {
+                    this.saLines.add(new HashMap<>());
+                }
+            }
+            case FULL_ASSOC -> {
+                this.faLines = new HashMap<>();
+            }
+        }
+    }
+
+    /**
+     * Returns whether a line is present in the local cache.
+     */
+    private boolean hasLine(long block) {
+        return switch (this.context.ca.type) {
+            case DIRECT_MAPPED -> {
+                int index = Math.floorMod(
+                        Math.floorDiv(block, this.context.blockSize), this.daLines.size());
+                if (daLines.get(index) == null) yield false;
+                else yield daLines.get(index).blockAddress == block;
+            }
+            case SET_ASSOC -> {
+                int index = Math.floorMod(
+                        Math.floorDiv(block, this.context.blockSize), this.saLines.size());
+                Map<Long, SimpleLine> map = saLines.get(index);
+                yield map.containsKey(block);
+            }
+            case FULL_ASSOC -> this.faLines.containsKey(block);
+        };
+    }
+
+    /**
+     * Reads a line from the local cache. Should only be called with local lock held.
+     */
+    public SimpleLine read(long block) {
+        if (!this.hasLine(block)) return null;
+        return switch (this.context.ca.type) {
+            case DIRECT_MAPPED -> {
+                int index = Math.floorMod(
+                    Math.floorDiv(block, this.context.blockSize), this.daLines.size());
+                yield daLines.get(index);
+            }
+            case SET_ASSOC -> {
+                int index = Math.floorMod(
+                    Math.floorDiv(block, this.context.blockSize), this.saLines.size());
+                Map<Long, SimpleLine> map = saLines.get(index);
+                yield map.get(block);
+            }
+            case FULL_ASSOC -> this.faLines.get(block);
+        };
+    }
+
+    /**
+     * Adds a line to the local cache. Should only be called with local lock held and after confirming there is space.
+     */
+    public void write(SimpleLine line) {
+        switch (this.context.ca.type) {
+            case DIRECT_MAPPED -> {
+                int index = Math.floorMod(
+                    Math.floorDiv(line.blockAddress, this.context.blockSize), this.daLines.size());
+                daLines.set(index, line);
+            }
+            case SET_ASSOC -> {
+                int index = Math.floorMod(
+                    Math.floorDiv(line.blockAddress, this.context.blockSize), this.saLines.size());
+                Map<Long, SimpleLine> map = saLines.get(index);
+                map.put(line.blockAddress, line);
+            }
+            case FULL_ASSOC -> {
+                faLines.put(line.blockAddress, line);
+            }
+        }
+    }
+
+    /**
+     * Removes a line and returns its block address from the full, local cache.
+     * This should only be called with both coherency and local locks held.
+     * If the cache is not full, null is returned.
+     * */
+    public SimpleLine evictIfFull(long block) {
+        if (this.context.ca.type == CacheAssociativityType.DIRECT_MAPPED) {
+            int index = Math.floorMod(
+                Math.floorDiv(block, this.context.blockSize), this.daLines.size());
+            SimpleLine victim = daLines.get(index);
+            daLines.set(index, null);
+            return victim;
+        }
+
+        Map<Long, SimpleLine> map = null;
+        int maxSize = Integer.MAX_VALUE;
+        switch (this.context.ca.type) {
+            case SET_ASSOC -> {
+                int index = Math.floorMod(
+                        Math.floorDiv(block, this.context.blockSize), this.saLines.size());
+                map = saLines.get(index);
+                maxSize = this.context.ca.ways;
+            }
+            case FULL_ASSOC -> {
+                map = faLines;
+                maxSize = numLines;
+            }
+        };
+        if (map == null || map.size() < maxSize) return null;
+
+        // Iterate through every line, preferring invalid lines over older lines
+        SimpleLine victim = null;
+        for (SimpleLine candidate : map.values()) {
+            if (victim == null || victim.isYoungerThan(candidate, this.context.eviction)) {
+                victim = candidate;
+            }
+        }
+
+        if (victim == null) {
+            throw new IllegalStateException("Cache has no evictable line.");
+        }
+
+        map.remove(victim.blockAddress);
+
+        return victim;
+    }
+}

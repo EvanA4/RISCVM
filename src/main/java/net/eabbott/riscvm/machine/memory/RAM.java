@@ -2,6 +2,7 @@ package net.eabbott.riscvm.machine.memory;
 
 import net.eabbott.riscvm.context.elf.ELFContext;
 import net.eabbott.riscvm.context.elf.ELFProgramHeader;
+import net.eabbott.riscvm.machine.memory.cache.MemoryResult;
 import net.eabbott.riscvm.util.Nullable;
 import net.eabbott.riscvm.util.VMLogger;
 
@@ -14,9 +15,8 @@ import java.util.concurrent.locks.ReentrantLock;
 * The virtual machine's RAM.
 * */
 public class RAM implements BackingStore {
-    VMLogger logger = VMLogger.getInstance();
+    static ReentrantLock LOCK = new ReentrantLock();
     Arena arena = Arena.ofShared();
-    ReentrantLock lock = new ReentrantLock();
     MemorySegment segment;
     long size;
 
@@ -25,15 +25,15 @@ public class RAM implements BackingStore {
         this.segment = arena.allocate(size);
     }
 
-    /*
+    /**
     * Returns the size of the RAM.
     * */
     public long length() {
         return this.size;
     }
 
-    /*
-    * Fills memory with ELF file data.
+    /**
+    * Fills memory with ELF file data. Only called before other threads are made.
     * */
     public void populate(ELFContext elf) throws IOException {
         for (ELFProgramHeader ph : elf.programHeaders) {
@@ -45,7 +45,7 @@ public class RAM implements BackingStore {
         }
     }
 
-    /*
+    /**
      * Writes src.length bytes at address in RAM.
      * */
     public synchronized void zero(long address, int size) {
@@ -53,18 +53,35 @@ public class RAM implements BackingStore {
         segment.asSlice(address, size).copyFrom(asSegment);
     }
 
-    /*
-    * Writes src.length bytes at address in RAM.
+    /**
+    * Writes src.length bytes at address in RAM, so long as it is not being used.
     * */
-    public synchronized void write(long address, byte[] src) {
-        MemorySegment asSegment = MemorySegment.ofArray(src);
-        segment.asSlice(address, src.length).copyFrom(asSegment);
+    public MemoryResult write(long address, byte[] src) {
+        if (LOCK.tryLock()) {
+            MemorySegment asSegment = MemorySegment.ofArray(src);
+            segment.asSlice(address, src.length).copyFrom(asSegment);
+            LOCK.unlock();
+            return new MemoryResult(false, null);
+        }
+        return new MemoryResult(true, null);
     }
 
-    /*
-     * Reads size bytes at address in RAM.
-     * */
-    public synchronized @Nullable byte[] read(long address, int size) {
-        return segment.asSlice(address, size).toArray(java.lang.foreign.ValueLayout.JAVA_BYTE);
+    /**
+     * Reads size bytes at address, so long as RAM is not being used.
+     */
+    public MemoryResult read(long address, int size) {
+        if (LOCK.tryLock()) {
+            byte[] data = segment.asSlice(address, size).toArray(java.lang.foreign.ValueLayout.JAVA_BYTE);
+            LOCK.unlock();
+            return new MemoryResult(false, data);
+        }
+        return new MemoryResult(true, null);
+    }
+
+    /**
+     * Fetches 32-bit instruction at address.
+     */
+    public byte[] fetch(long address) {
+        return segment.asSlice(address, 4).toArray(java.lang.foreign.ValueLayout.JAVA_BYTE);
     }
 }

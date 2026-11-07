@@ -2,7 +2,6 @@ package net.eabbott.riscvm.machine.memory.cache;
 
 import net.eabbott.riscvm.context.cache.CacheContext;
 import net.eabbott.riscvm.context.cache.CacheCoherency;
-import net.eabbott.riscvm.context.cache.CacheEvictionPolicy;
 import net.eabbott.riscvm.machine.memory.BackingStore;
 
 import java.util.Arrays;
@@ -12,7 +11,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The L2 cache for a hart.
+ * The L1 cache for a hart.
  * */
 public final class L2Cache implements BackingStore {
     // The snoopy bus lock and list of all L1 caches
@@ -20,7 +19,7 @@ public final class L2Cache implements BackingStore {
     private static final Map<Integer, L2Cache> CACHES = new ConcurrentHashMap<>();
 
     // The DIR coherency properties
-    private static final Map<Long, Map<Integer, L12Line>> DIRECTORY =
+    private static final Map<Long, Map<Integer, MESILine>> DIRECTORY =
             new ConcurrentHashMap<>();
     private static final Map<Long, Object> DIRECTORY_LOCKS =
             new ConcurrentHashMap<>();
@@ -30,13 +29,11 @@ public final class L2Cache implements BackingStore {
 
     private final int hartId;
     private final int blockSize;
-    private final int capacityLines;
     private final boolean writeBack;
     private final BackingStore backingStore;
-    private final CacheEvictionPolicy evictionPolicy;
     private final CacheCoherency coherency;
 
-    private final Map<Long, L12Line> lines = new HashMap<>();
+    private final MESICacheData lines;
     private long clock;
 
     public L2Cache(
@@ -55,10 +52,9 @@ public final class L2Cache implements BackingStore {
 
         this.hartId = hartId;
         this.blockSize = context.blockSize;
-        this.capacityLines = Math.toIntExact(context.size / context.blockSize);
         this.writeBack = context.isWriteBack;
-        this.evictionPolicy = Objects.requireNonNull(context.eviction, "eviction");
         this.coherency = Objects.requireNonNull(coherency, "coherency");
+        this.lines = new MESICacheData(context);
 
         synchronized (BUS_LOCK) {
             L2Cache previous = CACHES.putIfAbsent(hartId, this);
@@ -70,8 +66,8 @@ public final class L2Cache implements BackingStore {
     }
 
     @Override
-    public byte[] read(long address, int size) {
-        byte[] result = new byte[size];
+    public MemoryResult read(long address, int size) {
+        byte[] output = new byte[size];
 
         // Awkward loop tracks reads spanning multiple blocks
         int copied = 0;
@@ -81,21 +77,24 @@ public final class L2Cache implements BackingStore {
             int offset = (int) (currentAddress - block);
             int count = Math.min(size - copied, blockSize - offset);
 
-            byte[] chunk = readBlockRange(block, offset, count);
-            System.arraycopy(chunk, 0, result, copied, count);
+            MemoryResult result = readBlockRange(block, offset, count);
+            if (result.shouldWait()) return new MemoryResult(true, null);
+
+            System.arraycopy(result.data(), 0, output, copied, count);
             copied += count;
         }
 
-        return result;
+        return new MemoryResult(false, output);
     }
 
-    private byte[] readBlockRange(long block, int offset, int count) {
+    private MemoryResult readBlockRange(long block, int offset, int count) {
         // Best-case scenario: local read is possible
         synchronized (localLock) {
-            L12Line line = lines.get(block);
+            MESILine line = lines.read(block);
             if (isValid(line)) {
-                touch(line);
-                return Arrays.copyOfRange(line.data, offset, offset + count);
+                line.touch(++clock);
+                byte[] range = Arrays.copyOfRange(line.data, offset, offset + count);
+                return new MemoryResult(false, range);
             }
         }
 
@@ -103,10 +102,11 @@ public final class L2Cache implements BackingStore {
         synchronized (this.getCoherencyLock(block)) {
             // Check again if another hart changed local cache while acquiring coherency lock
             synchronized (localLock) {
-                L12Line line = lines.get(block);
+                MESILine line = lines.read(block);
                 if (isValid(line)) {
-                    touch(line);
-                    return Arrays.copyOfRange(line.data, offset, offset + count);
+                    line.touch(++clock);
+                    byte[] range = Arrays.copyOfRange(line.data, offset, offset + count);
+                    return new MemoryResult(false, range);
                 }
             }
 
@@ -115,29 +115,22 @@ public final class L2Cache implements BackingStore {
             boolean hadValidPeer = data != null;
 
             synchronized (localLock) {
-                // This shouldn't be possible, but check anyway because I'm scared
-                L12Line line = lines.get(block);
-                if (isValid(line)) {
-                    touch(line);
-                    return Arrays.copyOfRange(line.data, offset, offset + count);
-                }
-
                 // If block was not found among peers, access backing store
                 if (data == null) {
-                    data = readBackingBlock(block);
+                    MemoryResult result = readBackingBlock(block);
+                    if (result.shouldWait()) return new MemoryResult(true, null);
+                    data = result.data();
                 }
 
-                // Add/update line in cache and return read
-                line = installLine(block, data,
-                        hadValidPeer ? MESI.SHARED : MESI.EXCLUSIVE);
-                touch(line);
-                return Arrays.copyOfRange(line.data, offset, offset + count);
+                // Add/update line in cache and request stall
+                installLine(block, data, hadValidPeer ? MESI.SHARED : MESI.EXCLUSIVE);
+                return new MemoryResult(true, null);
             }
         }
     }
 
     @Override
-    public void write(long address, byte[] data) {
+    public MemoryResult write(long address, byte[] data) {
         Objects.requireNonNull(data, "data");
 
         // Awkward loop tracks writes spanning multiple blocks
@@ -148,22 +141,26 @@ public final class L2Cache implements BackingStore {
             int offset = (int) (currentAddress - block);
             int count = Math.min(data.length - copied, blockSize - offset);
 
-            writeBlockRange(block, offset, data, copied, count);
+            MemoryResult result = writeBlockRange(block, offset, data, copied, count);
+            if (result.shouldWait()) return new MemoryResult(true, null);
+
             copied += count;
         }
+
+        return new MemoryResult(false, null);
     }
 
-    private void writeBlockRange(
+    private MemoryResult writeBlockRange(
             long block, int offset, byte[] source, int sourceOffset, int count) {
 
         // Best-case scenario: local write is possible
         synchronized (localLock) {
-            L12Line line = lines.get(block);
+            MESILine line = lines.read(block);
             if (isValid(line)
                     && (line.state == MESI.MODIFIED
                     || line.state == MESI.EXCLUSIVE)) {
                 System.arraycopy(source, sourceOffset, line.data, offset, count);
-                touch(line);
+                line.touch(++clock);
 
                 if (line.state == MESI.EXCLUSIVE) {
                     line.state = MESI.MODIFIED;
@@ -173,7 +170,8 @@ public final class L2Cache implements BackingStore {
                     backingStore.write(block, line.data);
                     line.state = MESI.EXCLUSIVE;
                 }
-                return;
+
+                return new MemoryResult(false, null);
             }
         }
 
@@ -181,13 +179,13 @@ public final class L2Cache implements BackingStore {
         synchronized (this.getCoherencyLock(block)) {
             // Check again if another hart changed local cache while acquiring coherency lock
             synchronized (localLock) {
-                L12Line line = lines.get(block);
+                MESILine line = lines.read(block);
                 if (
                         isValid(line) &&
                                 (line.state == MESI.MODIFIED || line.state == MESI.EXCLUSIVE))
                 {
                     System.arraycopy(source, sourceOffset, line.data, offset, count);
-                    touch(line);
+                    line.touch(++clock);
 
                     if (line.state == MESI.EXCLUSIVE) {
                         line.state = MESI.MODIFIED;
@@ -197,14 +195,15 @@ public final class L2Cache implements BackingStore {
                         backingStore.write(block, line.data);
                         line.state = MESI.EXCLUSIVE;
                     }
-                    return;
+
+                    return new MemoryResult(false, null);
                 }
             }
 
             // MESI operation is still needed :(
             byte[] data;
             synchronized (localLock) {
-                L12Line line = lines.get(block);
+                MESILine line = lines.read(block);
                 data = isValid(line)
                         ? Arrays.copyOf(line.data, blockSize)
                         : null;
@@ -217,34 +216,20 @@ public final class L2Cache implements BackingStore {
 
             // If no peer has the line, access backing store
             if (data == null) {
-                data = readBackingBlock(block);
+                MemoryResult result = readBackingBlock(block);
+                if (result.shouldWait()) return new MemoryResult(true, null);
+                data = result.data();
             }
 
             if (coherency != CacheCoherency.NONE) {
                 invalidatePeerCopies(block);
             }
 
-            // Finally, write to local cache
+            // Finally, read to local cache and request stall
             synchronized (localLock) {
-                // ...but first make sure the line exists
-                L12Line line = lines.get(block);
-                if (!isValid(line)) {
-                    line = installLine(block, data, MESI.EXCLUSIVE);
-                }
-
-                // ...then write to local cache
-                System.arraycopy(source, sourceOffset, line.data, offset, count);
-                touch(line);
-
-                // ...and update backing store if write-through
-                if (writeBack) {
-                    line.state = MESI.MODIFIED;
-                } else {
-                    backingStore.write(block, line.data);
-                    line.state = MESI.EXCLUSIVE;
-                }
-
+                MESILine line = installLine(block, data, MESI.EXCLUSIVE);
                 registerDirectoryLine(block, line);
+                return new MemoryResult(true, null);
             }
         }
     }
@@ -259,7 +244,7 @@ public final class L2Cache implements BackingStore {
 
         for (L2Cache peer : peerCaches(block)) {
             synchronized (peer.localLock) {
-                L12Line peerLine = peer.lines.get(block);
+                MESILine peerLine = peer.lines.read(block);
                 if (!isValid(peerLine)) {
                     continue;
                 }
@@ -284,7 +269,7 @@ public final class L2Cache implements BackingStore {
     private void invalidatePeerCopies(long block) {
         for (L2Cache peer : peerCaches(block)) {
             synchronized (peer.localLock) {
-                L12Line peerLine = peer.lines.get(block);
+                MESILine peerLine = peer.lines.read(block);
                 if (isValid(peerLine)) {
                     peerLine.state = MESI.INVALID;
                     peer.unregisterDirectoryLine(block);
@@ -300,7 +285,7 @@ public final class L2Cache implements BackingStore {
         Map<Integer, L2Cache> result = new HashMap<>();
 
         if (coherency == CacheCoherency.DIR) {
-            Map<Integer, L12Line> sharers = DIRECTORY.get(block);
+            Map<Integer, MESILine> sharers = DIRECTORY.get(block);
             if (sharers != null) {
                 for (Integer id : sharers.keySet()) {
                     if (id != hartId) {
@@ -325,69 +310,26 @@ public final class L2Cache implements BackingStore {
     /**
      * Tries to read block from backing store. Should only be called with coherency lock held.
      */
-    private byte[] readBackingBlock(long block) {
-        byte[] data = backingStore.read(block, blockSize);
-        if (data == null || data.length != blockSize) {
+    private MemoryResult readBackingBlock(long block) {
+        MemoryResult result = backingStore.read(block, blockSize);
+        if (result == null || result.data().length != blockSize) {
             throw new IllegalStateException(
                     "Backing store returned an invalid cache block.");
         }
-        return data;
+        return result;
     }
 
     /**
      * Adds a line to the local cache. Should only be called with local lock held.
      */
-    private L12Line installLine(long block, byte[] data, MESI state) {
-        evictIfFull();
-        L12Line line = new L12Line(block, Arrays.copyOf(data, blockSize),
-                state, ++clock);
-        lines.put(block, line);
+    private MESILine installLine(long block, byte[] data, MESI state) {
+        MESILine evicted = this.lines.evictIfFull(block);
+        if (evicted.state == MESI.MODIFIED) unregisterDirectoryLine(evicted.blockAddress);
+        MESILine line = new MESILine(block, Arrays.copyOf(data, blockSize), state, ++clock);
+        lines.write(line);
+        line.touch(++clock);
         registerDirectoryLine(block, line);
         return line;
-    }
-
-    /**
-     * Removes a line from the full, local cache. Should only be called with both coherency and local locks held.
-     * */
-    private void evictIfFull() {
-        if (lines.size() < capacityLines) {
-            return;
-        }
-
-        // Iterate through every line, preferring invalid lines over "earlier" lines
-        L12Line victim = null;
-        for (L12Line candidate : lines.values()) {
-            if (candidate.state == MESI.INVALID) {
-                victim = candidate;
-                break;
-            }
-            if (victim == null || isEarlierVictim(candidate, victim)) {
-                victim = candidate;
-            }
-        }
-
-        if (victim == null) {
-            throw new IllegalStateException("Cache has no evictable line.");
-        }
-
-        // Should only be true for write-back caching
-        if (victim.state == MESI.MODIFIED) {
-            backingStore.write(victim.blockAddress, victim.data);
-        }
-
-        unregisterDirectoryLine(victim.blockAddress);
-        lines.remove(victim.blockAddress);
-    }
-
-    /**
-     * Defines whether one line is "earlier" than another for line eviction.
-     */
-    private boolean isEarlierVictim(L12Line candidate, L12Line current) {
-        return switch (evictionPolicy) {
-            case FIFO -> candidate.loadedAt < current.loadedAt;
-            case LRU -> candidate.lastUsed < current.lastUsed;
-            case LFU -> candidate.frequency < current.frequency;
-        };
     }
 
     /**
@@ -400,22 +342,14 @@ public final class L2Cache implements BackingStore {
     }
 
     /**
-     * Updates a line in cache.
-     */
-    private void touch(L12Line line) {
-        line.frequency++;
-        line.lastUsed = ++clock;
-    }
-
-    /**
      * Returns whether a line exists and is not invalid.
      */
-    private static boolean isValid(L12Line line) {
+    private static boolean isValid(MESILine line) {
         return line != null && line.state != MESI.INVALID;
     }
 
     /**
-     * Converts an address into a block address.
+     * Converts an address into a block-aligned byte address.
      */
     private long blockAddress(long address) {
         return address - Math.floorMod(address, blockSize);
@@ -424,7 +358,7 @@ public final class L2Cache implements BackingStore {
     /**
      * Adds the local cache's corresponding hart to the directory for a given block.
      */
-    private void registerDirectoryLine(long block, L12Line line) {
+    private void registerDirectoryLine(long block, MESILine line) {
         if (coherency != CacheCoherency.DIR || line == null) {
             return;
         }
@@ -433,14 +367,14 @@ public final class L2Cache implements BackingStore {
     }
 
     /**
-     * Removes the local cache's corresponding hart from the directory for a given block. 
+     * Removes the local cache's corresponding hart from the directory for a given block.
      */
     private void unregisterDirectoryLine(long block) {
         if (coherency != CacheCoherency.DIR) {
             return;
         }
 
-        Map<Integer, L12Line> sharers = DIRECTORY.get(block);
+        Map<Integer, MESILine> sharers = DIRECTORY.get(block);
         if (sharers != null) {
             sharers.remove(hartId);
             if (sharers.isEmpty()) {

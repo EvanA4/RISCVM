@@ -1,6 +1,7 @@
 package net.eabbott.riscvm.machine.memory;
 
 import net.eabbott.riscvm.machine.memory.cache.L2Cache;
+import net.eabbott.riscvm.machine.memory.cache.MemoryResult;
 import net.eabbott.riscvm.machine.register.CSRFile;
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.context.Context;
@@ -17,11 +18,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.function.IntUnaryOperator;
 
 public final class MemoryManager {
-    public static final ConcurrentMap<Integer, L1Cache> L1_CACHES =
-            new ConcurrentHashMap<>();
-    public static final ConcurrentMap<Integer, L2Cache> L2_CACHES =
-            new ConcurrentHashMap<>();
-
     private static final int STRIPE_COUNT = 256; // Must be power of 2
     private static final Object[] STRIPES = new Object[STRIPE_COUNT];
 
@@ -48,7 +44,7 @@ public final class MemoryManager {
     public final MMU mmu;
     public final RAM ram;
     public final Hart hart;
-    public final L1Cache l1;
+    public final BackingStore top;
 
     public MemoryManager(Hart hart, Context context) {
         VirtualMachine machine = VirtualMachine.getInstance();
@@ -57,74 +53,92 @@ public final class MemoryManager {
         this.mmu = new MMU(hart);
         this.ram = machine.ram;
 
-        L2Cache l2 = new L2Cache(context.cacheCoherency, context.l2Cache, hart.id, machine.l3);
-        this.l1 = new L1Cache(context.cacheCoherency, context.l1Cache, hart.id, l2);
+        boolean shouldHaveL1 = context.cacheDepth >= 1 && context.l1Cache.size != 0;
+        boolean shouldHaveL2 = context.cacheDepth >= 2 && context.l2Cache.size != 0;
+        boolean shouldHaveL3 = context.cacheDepth >= 3 && context.l3Cache.size != 0;
 
-        L1_CACHES.put(hart.id, l1);
-        L2_CACHES.put(hart.id, l2);
+        BackingStore l2Source = shouldHaveL3 ? machine.l3 : machine.ram;
+        L2Cache l2 = new L2Cache(context.cacheCoherency, context.l2Cache, hart.id, l2Source);
+        BackingStore l1Source = shouldHaveL2 ? l2 : l2Source;
+        L1Cache l1 = new L1Cache(context.cacheCoherency, context.l1Cache, hart.id, l1Source);
+
+        if (shouldHaveL1) this.top = l1;
+        else if (shouldHaveL2) this.top = l2;
+        else if (shouldHaveL3) this.top = machine.l3;
+        else this.top = machine.ram;
     }
 
-    public byte[] read(long address, int size, AccessType accessType) {
+    public MemoryResult read(long address, int size, AccessType accessType) {
         if (this.hart.csrFile.read(CSRFile.SATP) != 0)
             address = this.mmu.translate(address, size, accessType);
 
         synchronized (getStripe(address)) {
-            return l1.read(address, size);
+            return top.read(address, size);
         }
     }
 
-    public void write(long address, byte[] data, AccessType accessType) {
+    public MemoryResult write(long address, byte[] data, AccessType accessType) {
         if (this.hart.csrFile.read(CSRFile.SATP) != 0)
             address = this.mmu.translate(address, data.length, accessType);
 
         synchronized (getStripe(address)) {
             invalidateReservations(address);
-            l1.write(address, data);
+            return top.write(address, data);
         }
     }
 
     // Atomic-relevant code below:
 
-    public int rmw(long address, IntUnaryOperator func) {
+    public AMOResult rmw(long address, IntUnaryOperator func) {
         if (this.hart.csrFile.read(CSRFile.SATP) != 0)
             address = this.mmu.translate(address, 4, AccessType.AMO);
 
         synchronized (getStripe(address)) {
-            int oldValue = BinaryUtil.intFromBytesLE(l1.read(address, 4), 0, 4);
+            MemoryResult result = top.read(address, 4);
+            if (result.shouldWait()) return new AMOResult(true, 0);
+
+            int oldValue = BinaryUtil.intFromBytesLE(result.data(), 0, 4);
             invalidateReservations(address);
-            l1.write(address, BinaryUtil.bytesFromIntLE(func.applyAsInt(oldValue)));
-            return oldValue;
+            top.write(address, BinaryUtil.bytesFromIntLE(func.applyAsInt(oldValue)));
+            return new AMOResult(false, oldValue);
         }
     }
 
-    public int loadReserved(long address) {
+    public AMOResult loadReserved(long address) {
         long physicalAddress = translateAmoAddress(address);
         checkWordAlignment(physicalAddress);
 
         synchronized (getStripe(physicalAddress)) {
-            int value = BinaryUtil.intFromBytesLE(l1.read(physicalAddress, 4), 0, 4);
+            MemoryResult result = top.read(physicalAddress, 4);
+            if (result.shouldWait()) return new AMOResult(true, 0);
+
+            int value = BinaryUtil.intFromBytesLE(result.data(), 0, 4);
             RESERVATIONS.put(hart.id, physicalAddress);
-            return value;
+            return new AMOResult(false, value);
         }
     }
 
     /**
      * Attempts an SC.W. Returns 0 on success and 1 on failure.
      */
-    public int storeConditional(long address, int value) {
+    public AMOResult storeConditional(long address, int value) {
         long physicalAddress = translateAmoAddress(address);
         checkWordAlignment(physicalAddress);
 
         synchronized (getStripe(physicalAddress)) {
             Long reservation = RESERVATIONS.remove(hart.id);
 
-            if (reservation == null || reservation.longValue() != physicalAddress) {
-                return 1;
+            if (reservation == null || reservation != physicalAddress) {
+                return new AMOResult(false, 1);
             }
 
             invalidateReservations(physicalAddress);
-            l1.write(physicalAddress, BinaryUtil.bytesFromIntLE(value));
-            return 0;
+            // This write MUST go through, so unfortunately this must be looped
+            MemoryResult result = top.write(physicalAddress, BinaryUtil.bytesFromIntLE(value));
+            while (result.shouldWait()) {
+                result = top.write(physicalAddress, BinaryUtil.bytesFromIntLE(value));
+            }
+            return new AMOResult(false, 0);
         }
     }
 

@@ -1,6 +1,8 @@
 package net.eabbott.riscvm.machine.memory;
 
+import net.eabbott.riscvm.machine.memory.cache.MemoryResult;
+
 public interface BackingStore {
-    byte[] read(long address, int size);
-    void write(long address, byte[] data);
+    MemoryResult read(long address, int size);
+    MemoryResult write(long address, byte[] data);
 }

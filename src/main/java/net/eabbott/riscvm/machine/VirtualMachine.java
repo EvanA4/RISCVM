@@ -82,10 +82,17 @@ public class VirtualMachine {
 }
 
 /*
-* MEMORY (especially AMO ops) (which cache is the top? what if L1 is disabled?) (stall when cache miss)
-* WRITE
-* CSR register file, update variables each clock tick on falling edge?
-* forwarding
-* Parked harts need to freeze
-* Ending the program (all harts parked OR exit called)
+* TODO:
+* part 5:
+*   cache mapping
+*       CacheData with read, write
+*   stall when cache miss
+*   WRITE
+*   forwarding
+* part 6:
+*   AMO operands "rl" and "aq"
+*   What if L1 is disabled?
+*   CSR register file, update variables each clock tick on falling edge?
+*   Parked harts need to freeze
+*   Ending the program (all harts parked OR exit called)
 * */
