@@ -10,7 +10,10 @@ public class PipelineRegister {
     public byte[] rl, rr, rsv, rd, memop, aluop, amoop, amorl, amoaq;
 
     public PipelineRegister() {
-        this.inst = new byte[2][0];
+        this.inst = new byte[][]{
+            new byte[]{ 0x13, 0x00, 0x00, 0x00 },
+            new byte[]{ 0x13, 0x00, 0x00, 0x00 }
+        };
         this.pc = new int[2];
         this.left = new int[2];
         this.right = new int[2];

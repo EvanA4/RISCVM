@@ -32,10 +32,13 @@ public class VMClock {
     * */
     public void start() {
         // Keep ticking unless exit requested
-        while (!vm.isExiting()) {
+        while (!vm.isExiting) {
             try {
                 // Update temporary counter variable
-                if (counter++ == 12) break;
+                if (counter++ == 12) {
+                    vm.isExiting = true;
+                    break;
+                }
 
                 // Sleep for edge
                 Thread.sleep(halfPeriod);

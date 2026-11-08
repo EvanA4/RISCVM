@@ -23,13 +23,6 @@ public class StageThread extends Thread {
     * */
     @Override
     public void run() {
-        // At startup, wait for the clock to signal every pipeline to start
-        try {
-            vm.clock.await();
-        } catch (Exception e) {
-            return;
-        }
-
         // Keep waiting on the clock and executing the rising/falling functions
         while (!isInterrupted() && !vm.isExiting) {
             try {
@@ -46,5 +39,6 @@ public class StageThread extends Thread {
                 break;
             }
         }
+        logger.log("Broke out of stage loop!");
     }
 }

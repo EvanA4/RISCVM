@@ -38,22 +38,24 @@ public class WriteStage extends AbstractStage {
         int raw = BinaryUtil.intFromBytesLE(inst, 0, 4);
         Opcode opcode = Opcode.fromInt(raw & 0x7f);
 
-        // ECALL is the exact SYSTEM instruction 0x00000073.
-        if (opcode == Opcode.SYSTEM && raw == 0x00000073) {
-            int callNumber = hart.registers.read(17); // a7
-            SystemOpcode callOp = SystemOpcode.fromValue(callNumber);
+        // Perform system call (or lack thereof)
+        boolean isECALL = opcode == Opcode.SYSTEM && raw == 0x00000073;
+        int callNumber = isECALL ? hart.registers.read(17) : -1;
+        SystemOpcode callOp = SystemOpcode.fromValue(callNumber);
 
-            int result = VirtualMachine.getInstance().systemCall(
-                    new SystemCall(
-                            hart.id,
-                            callOp,
-                            hart.registers.read(10), // a0
-                            hart.registers.read(11), // a1
-                            hart.registers.read(12), // a2
-                            hart.registers.read(13)  // a3
-                    )
-            );
+        int result = VirtualMachine.getInstance().systemCall(
+            new SystemCall(
+                hart.id,
+                callOp,
+                isECALL ? hart.registers.read(10) : 0, // a0
+                isECALL ? hart.registers.read(11) : 0, // a1
+                isECALL ? hart.registers.read(12) : 0, // a2
+                isECALL ? hart.registers.read(13) : 0  // a3
+            )
+        );
 
+        // Use system call result if ECALL
+        if (isECALL) {
             // System-call return value is placed in a0.
             writeRegister = 10;
             writeValue = result;

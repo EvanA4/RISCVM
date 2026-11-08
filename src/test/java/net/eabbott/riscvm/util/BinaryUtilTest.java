@@ -8,7 +8,7 @@ class BinaryUtilTest {
 
     @Test
     void sext() {
-        MachineIO logger = new MachineIO();
+        VMLogger logger = new VMLogger();
 
         int example = 0b110101;
         for (int i = 0; i < 32; ++i) {

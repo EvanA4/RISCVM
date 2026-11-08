@@ -20,7 +20,7 @@ public class VMLogger {
         return instance;
     }
 
-    public static void create() {
+    public synchronized static void create() {
         instance = new VMLogger();
 
         DateTimeFormatter filenameTime =
@@ -41,11 +41,12 @@ public class VMLogger {
     /*
     * A basic string formatting log function. Logs to the correct location.
     * */
-    public void log(String format, Object... args) {
+    public synchronized void log(String format, Object... args) {
         String text = String.format(format, args);
         if (this.writer != null) {
             try {
                 this.writer.write(text + '\n');
+                this.writer.flush();
             } catch (IOException e) {
                 throw new RuntimeException(
                     String.format("Failed to write message to output: %s", e.getMessage())
@@ -59,14 +60,14 @@ public class VMLogger {
     /*
     * Helpful binary logging for debugging.
     * */
-    public void logBytes(byte[] src) {
+    public synchronized void logBytes(byte[] src) {
         this.logBytes(src, 4, false);
     }
 
     /*
      * Helpful binary logging for debugging.
      * */
-    public void logBytes(byte[] src, int bytesPerLine, boolean reverse) {
+    public synchronized void logBytes(byte[] src, int bytesPerLine, boolean reverse) {
         for (int offset = 0; offset < src.length; offset += bytesPerLine) {
             int end = Math.min(offset + bytesPerLine, src.length);
             StringBuilder line = new StringBuilder();
@@ -88,7 +89,7 @@ public class VMLogger {
     /*
      * Converts a byte into a series of 1's and 0's.
      * */
-    private String stringifyByte(byte src) {
+    private synchronized String stringifyByte(byte src) {
         int unsignedByte = src & 0xFF;
         String binary = Integer.toBinaryString(unsignedByte);
         return String.format("%8s", binary).replace(' ', '0');
