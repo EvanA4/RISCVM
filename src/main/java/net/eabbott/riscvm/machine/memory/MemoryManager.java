@@ -67,10 +67,9 @@ public final class MemoryManager {
     public final RAM ram;
     public final Hart hart;
     public final BackingStore top;
+    public final VirtualMachine machine = VirtualMachine.getInstance();
 
     public MemoryManager(Hart hart, Context context) {
-        VirtualMachine machine = VirtualMachine.getInstance();
-
         this.hart = hart;
         this.mmu = new MMU(hart);
         this.ram = machine.ram;
@@ -119,6 +118,20 @@ public final class MemoryManager {
             releaseStripes(relevant);
         }
         return output;
+    }
+
+    public byte[] fetch(long address) {
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
+            address = this.mmu.translate(address, 4, AccessType.FETCH);
+        }
+
+        SortedSet<Integer> relevant = stripesForRange(address, 4);
+        acquireStripes(relevant);
+        try {
+            return this.ram.fetch(address);
+        } finally {
+            releaseStripes(relevant);
+        }
     }
 
     // Atomic-relevant code below:

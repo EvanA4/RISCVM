@@ -320,6 +320,10 @@ public class DecodeStage extends AbstractStage {
             this.hart.pipelineRegisters[1].setNextToNop();
             this.needToNOP = false;
         }
-        this.hart.pipelineRegisters[1].tick();
+        if (this.needToFreeze) {
+            this.needToFreeze = false;
+        } else {
+            this.hart.pipelineRegisters[1].tick();
+        }
     }
 }

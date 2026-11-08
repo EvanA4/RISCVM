@@ -48,12 +48,16 @@ public final class L3Cache implements BackingStore {
                 int count = Math.min(size - copied, blockSize - offset);
     
                 MemoryResult result = readBlockRange(blockAddress, offset, count);
-                if (result.shouldWait()) return new MemoryResult(true, null);
+                if (result.shouldWait()) {
+                    LOCK.unlock();
+                    return new MemoryResult(true, null);
+                }
 
                 System.arraycopy(result.data(), 0, output, copied, count);
                 copied += count;
             }
-    
+
+            LOCK.unlock();
             return new MemoryResult(false, output);
         }
         return new MemoryResult(true, null);
@@ -72,10 +76,14 @@ public final class L3Cache implements BackingStore {
                 int count = Math.min(data.length - copied, blockSize - offset);
 
                 MemoryResult result = writeBlockRange(blockAddress, offset, data, copied, count);
-                if (result.shouldWait()) return new MemoryResult(true, null);
+                if (result.shouldWait()) {
+                    LOCK.unlock();
+                    return new MemoryResult(true, null);
+                }
 
                 copied += count;
             }
+            LOCK.unlock();
             return new MemoryResult(false, null);
         }
         return new MemoryResult(true, null);

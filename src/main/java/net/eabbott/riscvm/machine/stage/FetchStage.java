@@ -15,13 +15,11 @@ import java.nio.ByteBuffer;
 public class FetchStage extends AbstractStage {
     private final VMLogger logger = VMLogger.getInstance();
     private final Hart hart;
-    private final VirtualMachine vm;
     private final PipelineRegister nextReg;
     private int previousCounter = 0;
 
     public FetchStage(Hart hart) {
         this.hart = hart;
-        this.vm = VirtualMachine.getInstance();
         this.nextReg = this.hart.pipelineRegisters[0];
     }
 
@@ -39,7 +37,7 @@ public class FetchStage extends AbstractStage {
         this.nextReg.setPredictedNextPc(predictedNextPc);
 
         // Load raw instruction into new instruction register
-        byte[] rawInstruction = this.hart.memman.read(currentPC, 4, AccessType.FETCH);
+        byte[] rawInstruction = this.hart.memman.fetch(currentPC);
         byte[] flipped = ByteBuffer.wrap(rawInstruction).flip().array();
         this.nextReg.setInst(flipped);
         this.nextReg.setPC(currentPC);

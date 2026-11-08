@@ -107,6 +107,10 @@ public class ExecuteStage extends AbstractStage {
         if (hart.status != HartStatus.RUNNING) return;
 
         logger.log("Running falling edge for execute stage for hart #%d", hart.id);
-        this.hart.pipelineRegisters[2].tick();
+        if (this.needToFreeze) {
+            this.needToFreeze = false;
+        } else {
+            this.hart.pipelineRegisters[2].tick();
+        }
     }
 }

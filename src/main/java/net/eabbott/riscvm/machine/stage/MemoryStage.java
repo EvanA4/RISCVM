@@ -126,4 +126,10 @@ public class MemoryStage extends AbstractStage {
         logger.log("Running falling edge for memory stage for hart #%d", hart.id);
         hart.pipelineRegisters[3].tick();
     }
+
+    private void setStall() {
+        hart.stages[0].needToFreeze = true;
+        hart.stages[1].needToFreeze = true;
+        hart.stages[2].needToFreeze = true;
+    }
 }
