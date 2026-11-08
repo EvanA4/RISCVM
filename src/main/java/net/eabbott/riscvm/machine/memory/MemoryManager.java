@@ -13,8 +13,11 @@ import net.eabbott.riscvm.util.BinaryUtil;
 
 import java.util.Arrays;
 import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.IntUnaryOperator;
 
 /**
@@ -23,27 +26,41 @@ import java.util.function.IntUnaryOperator;
  * I will be very upset, though.
  */
 public final class MemoryManager {
-    private static final int STRIPE_COUNT = 256; // Must be power of 2
-    private static final Object[] STRIPES = new Object[STRIPE_COUNT];
+    private static final int STRIPE_SHIFT = 2;
+    private static final int STRIPE_COUNT = 256;
+    private static final ReentrantLock[] STRIPES = new ReentrantLock[STRIPE_COUNT];
 
     // Populate stripe lock array
     static {
-        Arrays.setAll(STRIPES, ignored -> new Object());
+        Arrays.setAll(STRIPES, ignored -> new ReentrantLock());
     }
 
     // LR reservations, one per hart
     private static final ConcurrentMap<Integer, Long> RESERVATIONS =
         new ConcurrentHashMap<>();
 
-    // Get stripe lock from physical address, based on SplitMix64
-    // https://rosettacode.org/wiki/Pseudo-random_numbers/Splitmix64
-    private static Object getStripe(long physicalAddress) {
-        long x = physicalAddress;
-        x += 0x9e3779b97f4a7c15L;
-        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9L;
-        x = (x ^ (x >> 27)) * 0x94d049bb133111ebL;
-        x ^= (x >> 31);
-        return STRIPES[(int) x & (STRIPE_COUNT - 1)];
+    // Get stripe lock from physical address
+    private static int stripeIndex(long address) {
+        return (int) ((address >>> STRIPE_SHIFT) & (STRIPE_COUNT - 1));
+    }
+
+    // Fetch stripe lock indices for a memory operation
+    private static SortedSet<Integer> stripesForRange(long address, int size) {
+        SortedSet<Integer> indices = new TreeSet<>();
+        for (int i = 0; i < size; ++i) {
+            indices.add(stripeIndex(address + i));
+        }
+        return indices;
+    }
+
+    // Acquires the appropriate locks in a sorted order to avoid deadlocks
+    private void acquireStripes(SortedSet<Integer> indices) {
+        for (Integer i : indices) STRIPES[i].lock();
+    }
+
+    // Acquires the appropriate locks in a sorted order to avoid deadlocks
+    private void releaseStripes(SortedSet<Integer> indices) {
+        for (Integer i : indices.reversed()) STRIPES[i].unlock();
     }
 
     public final MMU mmu;
@@ -77,19 +94,31 @@ public final class MemoryManager {
         if (this.hart.csrFile.read(CSRFile.SATP) != 0)
             address = this.mmu.translate(address, size, accessType);
 
-        synchronized (getStripe(address)) {
-            return top.read(address, size);
+        SortedSet<Integer> relevant = stripesForRange(address, size);
+        acquireStripes(relevant);
+        MemoryResult output;
+        try {
+            output = top.read(address, size);
+        } finally {
+            releaseStripes(relevant);
         }
+        return output;
     }
 
     public MemoryResult write(long address, byte[] data, AccessType accessType) {
         if (this.hart.csrFile.read(CSRFile.SATP) != 0)
             address = this.mmu.translate(address, data.length, accessType);
 
-        synchronized (getStripe(address)) {
-            invalidateReservations(address);
-            return top.write(address, data);
+        SortedSet<Integer> relevant = stripesForRange(address, data.length);
+        acquireStripes(relevant);
+        MemoryResult output;
+        try {
+            output = top.write(address, data);
+            if (!output.shouldWait()) invalidateReservations(address, data.length);
+        } finally {
+            releaseStripes(relevant);
         }
+        return output;
     }
 
     // Atomic-relevant code below:
@@ -97,15 +126,29 @@ public final class MemoryManager {
     public AMOResult rmw(long address, IntUnaryOperator func) {
         if (this.hart.csrFile.read(CSRFile.SATP) != 0)
             address = this.mmu.translate(address, 4, AccessType.AMO);
+        checkWordAlignment(address);
 
-        synchronized (getStripe(address)) {
+        SortedSet<Integer> relevant = stripesForRange(address, 4);
+        acquireStripes(relevant);
+
+        try {
             MemoryResult result = top.read(address, 4);
-            if (result.shouldWait()) return new AMOResult(true, 0);
+            if (result.shouldWait()) {
+                return new AMOResult(true, 0);
+            }
 
             int oldValue = BinaryUtil.intFromBytesLE(result.data(), 0, 4);
-            invalidateReservations(address);
-            top.write(address, BinaryUtil.bytesFromIntLE(func.applyAsInt(oldValue)));
+            int newValue = func.applyAsInt(oldValue);
+
+            result = top.write(address, BinaryUtil.bytesFromIntLE(newValue));
+            if (result.shouldWait()) {
+                return new AMOResult(true, 0);
+            }
+            invalidateReservations(address, 4);
+
             return new AMOResult(false, oldValue);
+        } finally {
+            releaseStripes(relevant);
         }
     }
 
@@ -113,37 +156,51 @@ public final class MemoryManager {
         long physicalAddress = translateAmoAddress(address);
         checkWordAlignment(physicalAddress);
 
-        synchronized (getStripe(physicalAddress)) {
+        SortedSet<Integer> relevant = stripesForRange(physicalAddress, 4);
+        acquireStripes(relevant);
+
+        try {
             MemoryResult result = top.read(physicalAddress, 4);
-            if (result.shouldWait()) return new AMOResult(true, 0);
+            if (result.shouldWait()) {
+                return new AMOResult(true, 0);
+            }
 
             int value = BinaryUtil.intFromBytesLE(result.data(), 0, 4);
             RESERVATIONS.put(hart.id, physicalAddress);
+
             return new AMOResult(false, value);
+        } finally {
+            releaseStripes(relevant);
         }
     }
 
-    /**
-     * Attempts an SC.W. Returns 0 on success and 1 on failure.
-     */
     public AMOResult storeConditional(long address, int value) {
         long physicalAddress = translateAmoAddress(address);
         checkWordAlignment(physicalAddress);
 
-        synchronized (getStripe(physicalAddress)) {
-            Long reservation = RESERVATIONS.remove(hart.id);
+        SortedSet<Integer> relevant = stripesForRange(physicalAddress, 4);
+        acquireStripes(relevant);
 
+        try {
+            Long reservation = RESERVATIONS.get(hart.id);
             if (reservation == null || reservation != physicalAddress) {
+                RESERVATIONS.remove(hart.id);
                 return new AMOResult(false, 1);
             }
 
-            invalidateReservations(physicalAddress);
-            // This write MUST go through, so unfortunately this must be looped
+            // Attempt store, abort if stall requested
             MemoryResult result = top.write(physicalAddress, BinaryUtil.bytesFromIntLE(value));
-            while (result.shouldWait()) {
-                result = top.write(physicalAddress, BinaryUtil.bytesFromIntLE(value));
+            if (result.shouldWait()) {
+                return new AMOResult(true, 0);
             }
+
+            // Only remove reservation(s) after successfully performing store
+            invalidateReservations(physicalAddress, 4);
+
             return new AMOResult(false, 0);
+
+        } finally {
+            releaseStripes(relevant);
         }
     }
 
@@ -163,9 +220,14 @@ public final class MemoryManager {
     /**
      * Call while holding the stripe for physicalAddress.
      */
-    private static void invalidateReservations(long physicalAddress) {
+    private static void invalidateReservations(long physicalAddress, int size) {
+        long writeEnd = physicalAddress + size;
         for (Map.Entry<Integer, Long> entry : RESERVATIONS.entrySet()) {
-            if (entry.getValue() == physicalAddress) {
+            long reservedAddress = entry.getValue();
+            long reservationEnd = reservedAddress + 4;
+
+            // If write range overlaps the reservation, invalidate it
+            if (physicalAddress < reservationEnd && reservedAddress < writeEnd) {
                 RESERVATIONS.remove(entry.getKey(), entry.getValue());
             }
         }
