@@ -4,6 +4,8 @@ import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.machine.HartStatus;
 import net.eabbott.riscvm.machine.instruction.AMOOp;
 import net.eabbott.riscvm.machine.instruction.Opcode;
+import net.eabbott.riscvm.machine.memory.AMOResult;
+import net.eabbott.riscvm.machine.memory.cache.MemoryResult;
 import net.eabbott.riscvm.machine.memory.virtual.AccessType;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.util.BinaryUtil;
@@ -59,8 +61,12 @@ public class MemoryStage extends AbstractStage {
             };
             if (hart.status != HartStatus.RUNNING) return;
 
-            byte[] data = hart.memman.read(address, size, AccessType.LOAD);
-            int value = BinaryUtil.intFromBytesLE(data, 0, size);
+            MemoryResult result = hart.memman.read(address, size, AccessType.LOAD);
+            if (result.shouldWait()) {
+                setStall();
+                return;
+            }
+            int value = BinaryUtil.intFromBytesLE(result.data(), 0, size);
             if (size == 1) value = (byte) value;
             else if (size == 2) value = (short) value;
             nextReg.setResult(value);
@@ -77,27 +83,32 @@ public class MemoryStage extends AbstractStage {
             };
             if (hart.status != HartStatus.RUNNING) return;
 
-            hart.memman.write(
-                    address,
-                    Arrays.copyOfRange(BinaryUtil.bytesFromIntLE(prevReg.getStrval()), 0, size),
-                    AccessType.STORE
+            MemoryResult result = hart.memman.write(
+                address,
+                Arrays.copyOfRange(BinaryUtil.bytesFromIntLE(prevReg.getStrval()), 0, size),
+                AccessType.STORE
             );
+            if (result.shouldWait()) setStall();
 
         } else if (opcode == Opcode.AMO) {
             AMOOp operation = AMOOp.fromByte(prevReg.getAMOOp());
             int operand = prevReg.getStrval();
 
             if (operation == AMOOp.LR) {
-                nextReg.setResult(hart.memman.loadReserved(address));
+                AMOResult result = hart.memman.loadReserved(address);
+                if (result.shouldWait()) setStall();
+                else nextReg.setResult(result.data());
                 return;
             }
 
             if (operation == AMOOp.SC) {
-                nextReg.setResult(hart.memman.storeConditional(address, operand));
+                AMOResult result = hart.memman.storeConditional(address, operand);
+                if (result.shouldWait()) setStall();
+                else nextReg.setResult(result.data());
                 return;
             }
 
-            int oldValue = hart.memman.rmw(address, prev -> switch (operation) {
+            AMOResult result = hart.memman.rmw(address, prev -> switch (operation) {
                 case SWAP -> operand;
                 case ADD -> prev + operand;
                 case XOR -> prev ^ operand;
@@ -113,9 +124,8 @@ public class MemoryStage extends AbstractStage {
                         "Unsupported AMO operation: " + operation
                 );
             });
-
-            // RMW's write to result
-            nextReg.setResult(oldValue);
+            if (result.shouldWait()) setStall();
+            else nextReg.setResult(result.data());
         }
     }
 
@@ -124,12 +134,17 @@ public class MemoryStage extends AbstractStage {
         if (hart.status != HartStatus.RUNNING) return;
 
         logger.log("Running falling edge for memory stage for hart #%d", hart.id);
-        hart.pipelineRegisters[3].tick();
+        if (this.needToFreeze) {
+            this.needToFreeze = false;
+        } else {
+            hart.pipelineRegisters[3].tick();
+        }
     }
 
     private void setStall() {
         hart.stages[0].needToFreeze = true;
         hart.stages[1].needToFreeze = true;
         hart.stages[2].needToFreeze = true;
+        hart.stages[3].needToFreeze = true;
     }
 }

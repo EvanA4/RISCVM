@@ -116,7 +116,7 @@ public final class MMU {
     private int readPte(long va, long pteAddress) {
         checkPhysicalBounds(va, pteAddress, 4);
         try {
-            byte[] word = this.machine.ram.read(pteAddress, 4);
+            byte[] word = this.machine.ram.fetch(pteAddress);
             return (word[0] & 0xFF)
                 | ((word[1] & 0xFF) << 8)
                 | ((word[2] & 0xFF) << 16)

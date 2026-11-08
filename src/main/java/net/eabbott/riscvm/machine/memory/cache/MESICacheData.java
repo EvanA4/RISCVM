@@ -148,7 +148,7 @@ public class MESICacheData {
      * the backing store successfully wrote back the line (if it was dirty).
      * If the cache is not full, null is returned.
      * */
-    public MESILine evictBlock(long block) {
+    public void evictBlock(long block) {
         if (this.context.ca.type == CacheAssociativityType.DIRECT_MAPPED) {
             int index = Math.floorMod(
                 Math.floorDiv(block, this.context.blockSize), this.daLines.size());
