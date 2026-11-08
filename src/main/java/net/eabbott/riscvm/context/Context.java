@@ -3,6 +3,7 @@ package net.eabbott.riscvm.context;
 import net.eabbott.riscvm.context.cache.*;
 import net.eabbott.riscvm.context.elf.ELFContext;
 import net.eabbott.riscvm.util.Nullable;
+import net.eabbott.riscvm.util.VMLogger;
 
 import java.io.FileReader;
 import java.io.IOException;
@@ -19,6 +20,7 @@ public class Context extends AbstractContext {
             "-cW3", "-cE1", "-cE2", "-cE3", "-cC", "-bp", "-bpD", "-mmu", "-tlb", "-tlbE"
     };
     private final Set<String> VALID_ARGS_SET = new HashSet<>(Arrays.stream(VALID_ARGS).toList());
+    private final VMLogger logger = VMLogger.getInstance();
 
     /*
     * A static method for creating an argument-populated context class with one function call.
@@ -42,12 +44,12 @@ public class Context extends AbstractContext {
 
             // Start a logger to print to the correct output file (or stdout)
             if (context.outputFile != null) {
-                context.logger.open(context.outputFile);
+                context.machineIO.open(context.outputFile);
             }
             return context;
 
         } catch (Exception e) {
-            context.logger.log("Failed to parse arguments: %s", e.getMessage());
+            VMLogger.getInstance().log("Failed to parse arguments: %s", e.getMessage());
             return null;
         }
     }

@@ -3,8 +3,6 @@ package net.eabbott.riscvm.machine.memory;
 import net.eabbott.riscvm.context.elf.ELFContext;
 import net.eabbott.riscvm.context.elf.ELFProgramHeader;
 import net.eabbott.riscvm.machine.memory.cache.MemoryResult;
-import net.eabbott.riscvm.util.Nullable;
-import net.eabbott.riscvm.util.VMLogger;
 
 import java.io.IOException;
 import java.lang.foreign.Arena;

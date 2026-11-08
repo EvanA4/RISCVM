@@ -3,12 +3,15 @@ package net.eabbott.riscvm;
 import net.eabbott.riscvm.context.Context;
 import net.eabbott.riscvm.machine.VirtualMachine;
 import net.eabbott.riscvm.util.BinaryUtil;
+import net.eabbott.riscvm.util.VMLogger;
 
 /*
 * The driver function of the entire process.
 * */
 public class Main {
     static void main(String[] args) {
+        VMLogger.create();
+
         // Parse arguments, exit if failed
         Context context = Context.parseArgs(args);
         if (context == null) return;

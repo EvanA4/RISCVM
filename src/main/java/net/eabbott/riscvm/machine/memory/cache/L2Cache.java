@@ -67,6 +67,11 @@ public final class L2Cache implements BackingStore {
         }
     }
 
+    public void invalidateAll() {
+        // Shallow invalidation ignores dirty entries
+        lines.invalidateAll();
+    }
+
     @Override
     public MemoryResult read(long address, int size) {
         byte[] output = new byte[size];

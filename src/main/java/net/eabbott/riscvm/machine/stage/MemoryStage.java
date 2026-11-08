@@ -27,7 +27,9 @@ public class MemoryStage extends AbstractStage {
 
     @Override
     public void rising() {
-        if (hart.status != HartStatus.RUNNING) return;
+        if (this.hart.status != HartStatus.RUNNING) {
+            this.needToNOP = true;
+        }
 
         logger.log("Running rising edge for memory stage for hart #%d", hart.id);
 
@@ -131,13 +133,17 @@ public class MemoryStage extends AbstractStage {
 
     @Override
     public void falling() {
-        if (hart.status != HartStatus.RUNNING) return;
-
         logger.log("Running falling edge for memory stage for hart #%d", hart.id);
+
+        if (this.needToNOP) {
+            this.hart.pipelineRegisters[3].setNextToNop();
+            this.needToNOP = false;
+        }
+
         if (this.needToFreeze) {
             this.needToFreeze = false;
         } else {
-            hart.pipelineRegisters[3].tick();
+            this.hart.pipelineRegisters[3].tick();
         }
     }
 

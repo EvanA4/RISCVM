@@ -1,6 +1,6 @@
 package net.eabbott.riscvm.machine;
 
-import net.eabbott.riscvm.machine.register.PipelineRegister;
+import net.eabbott.riscvm.util.MachineIO;
 import net.eabbott.riscvm.util.VMLogger;
 
 import java.time.Duration;
@@ -18,8 +18,11 @@ public class VMClock {
     private int counter = 0;
     private ClockPhase phase = ClockPhase.RISING;
 
+    public final CyclicBarrier callBarrier;
+
     public VMClock(int numHarts, long frequency) {
         this.barrier = new CyclicBarrier(numHarts * 5 + 1);
+        this.callBarrier = new CyclicBarrier(numHarts + 1);
         double periodNano = 500_000_000. / (double) frequency;
         this.halfPeriod = Duration.ofNanos(Double.valueOf(periodNano).longValue());
     }
@@ -28,26 +31,39 @@ public class VMClock {
     * The loop of the clock. Waits for pipeline threads before continuing.
     * */
     public void start() {
+        // Keep ticking unless exit requested
         while (!vm.isExiting()) {
             try {
                 // Update temporary counter variable
-                if (counter == 12) {
-                    this.vm.exit();
-                    break;
-                }
-                ++this.counter;
+                if (counter++ == 12) break;
 
+                // Sleep for edge
                 Thread.sleep(halfPeriod);
 
-                if (this.vm.isExiting()) break;
-
-                // Update clock phase
+                // Update clock phase just before waiting
                 switch (this.phase) {
-                    case RISING -> this.phase = ClockPhase.FALLING;
-                    case FALLING -> this.phase = ClockPhase.RISING;
+                    case RISING -> {
+                        // Handle any system calls on main thread
+                        // Wait for hart threads to make system calls
+                        callBarrier.await();
+
+                        // Process tick's list of system calls
+                        vm.processCalls();
+
+                        // Notify harts' threads of completion
+                        callBarrier.await();
+
+                        this.phase = ClockPhase.FALLING;
+                    }
+                    case FALLING -> {
+                        // Clear tick's list of system calls
+                        vm.calls.clear();
+
+                        this.phase = ClockPhase.RISING;
+                    }
                 }
 
-                this.logger.log("New clock tick");
+                logger.log("New clock tick");
                 barrier.await();
 
             } catch (InterruptedException e) {

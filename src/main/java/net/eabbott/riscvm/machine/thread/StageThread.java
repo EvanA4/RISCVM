@@ -31,13 +31,13 @@ public class StageThread extends Thread {
         }
 
         // Keep waiting on the clock and executing the rising/falling functions
-        while (!isInterrupted() && !vm.isExiting()) {
+        while (!isInterrupted() && !vm.isExiting) {
             try {
                 stage.rising();
-                if (isInterrupted() || vm.isExiting()) break;
+                if (isInterrupted() || vm.isExiting) break;
                 vm.clock.await();
                 stage.falling();
-                if (isInterrupted() || vm.isExiting()) break;
+                if (isInterrupted() || vm.isExiting) break;
                 vm.clock.await();
             } catch (InterruptedException e) {
                 break;

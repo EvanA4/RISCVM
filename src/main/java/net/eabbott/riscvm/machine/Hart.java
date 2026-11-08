@@ -10,6 +10,8 @@ import net.eabbott.riscvm.machine.stage.*;
 import net.eabbott.riscvm.machine.thread.StageThread;
 import net.eabbott.riscvm.util.BinaryUtil;
 
+import java.util.concurrent.CyclicBarrier;
+
 /*
 * Hart definition of the virtual machine. Has its own PC, ID, pipeline, and CSR and register files.
 * */
@@ -81,10 +83,6 @@ public class Hart {
                 : -1;
 
         return rs1 == rd || rs2 == rd;
-    }
-
-    public void exit() {
-        for (int i = 0; i < 5; ++i) threads[i].interrupt();
     }
 }
 

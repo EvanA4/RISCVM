@@ -1,7 +1,5 @@
 package net.eabbott.riscvm.context.elf;
 
-import net.eabbott.riscvm.util.VMLogger;
-
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.List;

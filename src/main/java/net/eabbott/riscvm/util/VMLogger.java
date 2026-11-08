@@ -2,17 +2,16 @@ package net.eabbott.riscvm.util;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 
 /*
 * The logger for the entire virtual machine application.
 * */
 public class VMLogger {
     private static VMLogger instance;
-    private @Nullable FileWriter writer = null;
-
-    public VMLogger() {
-        instance = this;
-    }
+    private FileWriter writer = null;
 
     /*
     * A cheeky function allowing for a global VMLogger object.
@@ -21,12 +20,17 @@ public class VMLogger {
         return instance;
     }
 
-    /*
-    * Only called if meant to log to an actual file.
-    * */
-    public void open(String fileName) {
+    public static void create() {
+        instance = new VMLogger();
+
+        DateTimeFormatter filenameTime =
+                DateTimeFormatter.ofPattern("uuuuMMdd-HHmmss-SSS")
+                        .withZone(ZoneOffset.UTC);
+
+        String fileName = "app-" + filenameTime.format(Instant.now()) + ".log";
+
         try {
-            this.writer = new FileWriter(fileName);
+            instance.writer = new FileWriter(fileName);
         } catch (IOException e) {
             throw new RuntimeException(
                 String.format("Failed to open output file: %s", e.getMessage())

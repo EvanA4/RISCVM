@@ -3,7 +3,7 @@ package net.eabbott.riscvm.context;
 import net.eabbott.riscvm.context.cache.*;
 import net.eabbott.riscvm.context.elf.ELFContext;
 import net.eabbott.riscvm.util.Nullable;
-import net.eabbott.riscvm.util.VMLogger;
+import net.eabbott.riscvm.util.MachineIO;
 
 /*
 * A class representing the initial values for each virtual machine configuration.
@@ -41,7 +41,7 @@ public abstract class AbstractContext {
     public boolean allowMMU = true;
     public int numTLBSlots = 8;
     public CacheEvictionPolicy tlbEviction = CacheEvictionPolicy.LRU;
-    public VMLogger logger = new VMLogger();
+    public MachineIO machineIO = new MachineIO();
 
     public abstract void dump();
 }

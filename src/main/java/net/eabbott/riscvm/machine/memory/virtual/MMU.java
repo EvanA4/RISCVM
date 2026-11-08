@@ -20,7 +20,7 @@ public final class MMU {
     /**
      * Translates a virtual address and checks that the requested byte range is within physical RAM.
      */
-    public long translate(long address, int size, AccessType access) {
+    public long translate(long address, int size, AccessType access) throws MemoryFault {
         long va = address & ADDRESS_MASK;
 
         // Find leaf PTE
@@ -113,7 +113,7 @@ public final class MMU {
         throw new MemoryFault(access, va, "No valid SV32 translation");
     }
 
-    private int readPte(long va, long pteAddress) {
+    private int readPte(long va, long pteAddress) throws MemoryFault {
         checkPhysicalBounds(va, pteAddress, 4);
         try {
             byte[] word = this.machine.ram.fetch(pteAddress);
@@ -131,7 +131,7 @@ public final class MMU {
         }
     }
 
-    private void checkPermission(TLBEntry entry, long va, AccessType access) {
+    private void checkPermission(TLBEntry entry, long va, AccessType access) throws MemoryFault {
         boolean permitted = switch (access) {
             case FETCH -> entry.permitsExecute();
             case LOAD -> entry.permitsRead();
@@ -143,7 +143,7 @@ public final class MMU {
         }
     }
 
-    private void checkPhysicalBounds(long va, long pa, int sizeBytes) {
+    private void checkPhysicalBounds(long va, long pa, int sizeBytes) throws MemoryFault {
         long ramSize = this.machine.ram.length();
 
         // The subtraction form avoids overflow in pa + sizeBytes.

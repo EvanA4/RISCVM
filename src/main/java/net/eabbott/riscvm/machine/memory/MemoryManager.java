@@ -2,6 +2,7 @@ package net.eabbott.riscvm.machine.memory;
 
 import net.eabbott.riscvm.machine.memory.cache.L2Cache;
 import net.eabbott.riscvm.machine.memory.cache.MemoryResult;
+import net.eabbott.riscvm.machine.memory.virtual.MemoryFault;
 import net.eabbott.riscvm.machine.register.CSRFile;
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.context.Context;
@@ -67,6 +68,8 @@ public final class MemoryManager {
     public final RAM ram;
     public final Hart hart;
     public final BackingStore top;
+    public final L2Cache l2;
+    public final L1Cache l1;
     public final VirtualMachine machine = VirtualMachine.getInstance();
 
     public MemoryManager(Hart hart, Context context) {
@@ -79,9 +82,9 @@ public final class MemoryManager {
         boolean shouldHaveL3 = context.cacheDepth >= 3 && context.l3Cache.size != 0;
 
         BackingStore l2Source = shouldHaveL3 ? machine.l3 : machine.ram;
-        L2Cache l2 = new L2Cache(context.cacheCoherency, context.l2Cache, hart.id, l2Source);
+        l2 = new L2Cache(context.cacheCoherency, context.l2Cache, hart.id, l2Source);
         BackingStore l1Source = shouldHaveL2 ? l2 : l2Source;
-        L1Cache l1 = new L1Cache(context.cacheCoherency, context.l1Cache, hart.id, l1Source);
+        l1 = new L1Cache(context.cacheCoherency, context.l1Cache, hart.id, l1Source);
 
         if (shouldHaveL1) this.top = l1;
         else if (shouldHaveL2) this.top = l2;
@@ -89,7 +92,16 @@ public final class MemoryManager {
         else this.top = machine.ram;
     }
 
-    public MemoryResult read(long address, int size, AccessType accessType) {
+    public void sfenceVma(long rs1, long rs2) {
+        mmu.sfenceVma(rs1, rs2);
+    }
+
+    public void invalidateAll() {
+        l1.invalidateAll();
+        l2.invalidateAll();
+    }
+
+    public MemoryResult read(long address, int size, AccessType accessType) throws MemoryFault {
         if (this.hart.csrFile.read(CSRFile.SATP) != 0)
             address = this.mmu.translate(address, size, accessType);
 
@@ -104,7 +116,7 @@ public final class MemoryManager {
         return output;
     }
 
-    public MemoryResult write(long address, byte[] data, AccessType accessType) {
+    public MemoryResult write(long address, byte[] data, AccessType accessType) throws MemoryFault {
         if (this.hart.csrFile.read(CSRFile.SATP) != 0)
             address = this.mmu.translate(address, data.length, accessType);
 
@@ -120,10 +132,9 @@ public final class MemoryManager {
         return output;
     }
 
-    public byte[] fetch(long address) {
-        if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
+    public byte[] fetch(long address) throws MemoryFault {
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0)
             address = this.mmu.translate(address, 4, AccessType.FETCH);
-        }
 
         SortedSet<Integer> relevant = stripesForRange(address, 4);
         acquireStripes(relevant);
@@ -136,7 +147,7 @@ public final class MemoryManager {
 
     // Atomic-relevant code below:
 
-    public AMOResult rmw(long address, IntUnaryOperator func) {
+    public AMOResult rmw(long address, IntUnaryOperator func) throws MemoryFault {
         if (this.hart.csrFile.read(CSRFile.SATP) != 0)
             address = this.mmu.translate(address, 4, AccessType.AMO);
         checkWordAlignment(address);
@@ -165,21 +176,22 @@ public final class MemoryManager {
         }
     }
 
-    public AMOResult loadReserved(long address) {
-        long physicalAddress = translateAmoAddress(address);
-        checkWordAlignment(physicalAddress);
+    public AMOResult loadReserved(long address) throws MemoryFault {
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0)
+            address = this.mmu.translate(address, 4, AccessType.AMO);
+        checkWordAlignment(address);
 
-        SortedSet<Integer> relevant = stripesForRange(physicalAddress, 4);
+        SortedSet<Integer> relevant = stripesForRange(address, 4);
         acquireStripes(relevant);
 
         try {
-            MemoryResult result = top.read(physicalAddress, 4);
+            MemoryResult result = top.read(address, 4);
             if (result.shouldWait()) {
                 return new AMOResult(true, 0);
             }
 
             int value = BinaryUtil.intFromBytesLE(result.data(), 0, 4);
-            RESERVATIONS.put(hart.id, physicalAddress);
+            RESERVATIONS.put(hart.id, address);
 
             return new AMOResult(false, value);
         } finally {
@@ -187,41 +199,35 @@ public final class MemoryManager {
         }
     }
 
-    public AMOResult storeConditional(long address, int value) {
-        long physicalAddress = translateAmoAddress(address);
-        checkWordAlignment(physicalAddress);
+    public AMOResult storeConditional(long address, int value) throws MemoryFault {
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0)
+            address = this.mmu.translate(address, 4, AccessType.AMO);
+        checkWordAlignment(address);
 
-        SortedSet<Integer> relevant = stripesForRange(physicalAddress, 4);
+        SortedSet<Integer> relevant = stripesForRange(address, 4);
         acquireStripes(relevant);
 
         try {
             Long reservation = RESERVATIONS.get(hart.id);
-            if (reservation == null || reservation != physicalAddress) {
+            if (reservation == null || reservation != address) {
                 RESERVATIONS.remove(hart.id);
                 return new AMOResult(false, 1);
             }
 
             // Attempt store, abort if stall requested
-            MemoryResult result = top.write(physicalAddress, BinaryUtil.bytesFromIntLE(value));
+            MemoryResult result = top.write(address, BinaryUtil.bytesFromIntLE(value));
             if (result.shouldWait()) {
                 return new AMOResult(true, 0);
             }
 
             // Only remove reservation(s) after successfully performing store
-            invalidateReservations(physicalAddress, 4);
+            invalidateReservations(address, 4);
 
             return new AMOResult(false, 0);
 
         } finally {
             releaseStripes(relevant);
         }
-    }
-
-    private long translateAmoAddress(long address) {
-        if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
-            return this.mmu.translate(address, 4, AccessType.AMO);
-        }
-        return address;
     }
 
     private static void checkWordAlignment(long address) {

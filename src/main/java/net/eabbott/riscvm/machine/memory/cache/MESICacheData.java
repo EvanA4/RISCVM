@@ -4,9 +4,9 @@ import net.eabbott.riscvm.context.cache.CacheAssociativityType;
 import net.eabbott.riscvm.context.cache.CacheContext;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MESICacheData {
     private final CacheContext context;
@@ -26,11 +26,27 @@ public class MESICacheData {
             case SET_ASSOC -> {
                 this.saLines = new ArrayList<>();
                 for (int i = 0; i < this.numLines / context.ca.ways; ++i) {
-                    this.saLines.add(new HashMap<>());
+                    this.saLines.add(new ConcurrentHashMap<>());
                 }
             }
             case FULL_ASSOC -> {
-                this.faLines = new HashMap<>();
+                this.faLines = new ConcurrentHashMap<>();
+            }
+        }
+    }
+
+    public void invalidateAll() {
+        switch (context.ca.type) {
+            case DIRECT_MAPPED -> {
+                for (int i = 0; i < this.numLines; ++i) this.daLines.set(i, null);
+            }
+            case SET_ASSOC -> {
+                for (int i = 0; i < this.numLines / context.ca.ways; ++i) {
+                    this.saLines.get(i).clear();
+                }
+            }
+            case FULL_ASSOC -> {
+                this.faLines.clear();
             }
         }
     }

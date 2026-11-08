@@ -3,7 +3,7 @@ package net.eabbott.riscvm.machine.stage;
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.machine.HartStatus;
 import net.eabbott.riscvm.machine.VirtualMachine;
-import net.eabbott.riscvm.machine.memory.virtual.AccessType;
+import net.eabbott.riscvm.machine.memory.virtual.MemoryFault;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.util.VMLogger;
 
@@ -24,7 +24,9 @@ public class FetchStage extends AbstractStage {
     }
 
     public void rising() {
-        if (this.hart.status != HartStatus.RUNNING) return;
+        if (this.hart.status != HartStatus.RUNNING) {
+            this.needToNOP = true;
+        }
 
         logger.log("Running rising edge for fetch stage for hart #%d", this.hart.id);
 
@@ -37,16 +39,22 @@ public class FetchStage extends AbstractStage {
         this.nextReg.setPredictedNextPc(predictedNextPc);
 
         // Load raw instruction into new instruction register
-        byte[] rawInstruction = this.hart.memman.fetch(currentPC);
+        byte[] rawInstruction = new byte[]{0x13, 0x00, 0x00, 0x00};
+        if (hart.status == HartStatus.RUNNING) {
+            try {
+                rawInstruction = this.hart.memman.fetch(currentPC);
+            } catch (MemoryFault e) {
+                VirtualMachine.getInstance().parkHart(hart.id, HartStatus.FETCH_FAULT);
+            }
+        }
         byte[] flipped = ByteBuffer.wrap(rawInstruction).flip().array();
         this.nextReg.setInst(flipped);
         this.nextReg.setPC(currentPC);
     }
 
     public void falling() {
-        if (this.hart.status != HartStatus.RUNNING) return;
-
         logger.log("Running falling edge for fetch stage for hart #%d", this.hart.id);
+
         if (this.needToNOP) {
             this.hart.pipelineRegisters[0].setNextToNop();
             this.needToNOP = false;

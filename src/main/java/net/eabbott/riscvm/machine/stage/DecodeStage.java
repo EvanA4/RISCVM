@@ -2,6 +2,7 @@ package net.eabbott.riscvm.machine.stage;
 
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.machine.HartStatus;
+import net.eabbott.riscvm.machine.VirtualMachine;
 import net.eabbott.riscvm.machine.instruction.ALUOp;
 import net.eabbott.riscvm.machine.instruction.AMOOp;
 import net.eabbott.riscvm.machine.instruction.Opcode;
@@ -59,7 +60,9 @@ public class DecodeStage extends AbstractStage {
     }
 
     public void rising() {
-        if (this.hart.status != HartStatus.RUNNING) return;
+        if (this.hart.status != HartStatus.RUNNING) {
+            this.needToNOP = true;
+        }
 
         logger.log("Running rising edge for decode stage for hart #%d", this.hart.id);
 
@@ -78,7 +81,7 @@ public class DecodeStage extends AbstractStage {
         Opcode opcode = Opcode.fromInt(opcodeNum);
         if (opcode == null) {
             logger.log("Found illegal instruction opcode for hart #%d.", this.hart.id);
-            this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+            onIllegalInstruction();
             return;
         }
 
@@ -95,6 +98,7 @@ public class DecodeStage extends AbstractStage {
                 logger.log("Processing type I: %s", opcode);
 
                 int imm = BinaryUtil.intFromBits(instruction, 20, 12, true);
+                this.nextReg.setRl((byte) rs1);
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
                 this.nextReg.setRd((byte) rd);
@@ -107,7 +111,7 @@ public class DecodeStage extends AbstractStage {
                     case 0b001 -> this.nextReg.setMemop((byte) 0b010); // Half-word
                     case 0b010 -> this.nextReg.setMemop((byte) 0b011); // Word
                     default -> {
-                        this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                        onIllegalInstruction();
                         return;
                     }
                 }
@@ -131,7 +135,9 @@ public class DecodeStage extends AbstractStage {
 
                     // SFENCE.VMA encoding: funct7=0b0001001, rd=0, funct3=0, rs1 and rs2 are operands
                     if (funct7 == 0b0001001 && rd == 0) {
+                        this.nextReg.setRl((byte) rs1);
                         this.nextReg.setLeft(this.hart.registers.read(rs1));
+                        this.nextReg.setRr((byte) rs2);
                         this.nextReg.setRight(this.hart.registers.read(rs2));
                         this.nextReg.setRd((byte) 0);
                         this.nextReg.setMemop((byte) 0);
@@ -139,7 +145,7 @@ public class DecodeStage extends AbstractStage {
                         break;
                     }
 
-                    this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                    onIllegalInstruction();
                     return;
                 }
 
@@ -152,6 +158,7 @@ public class DecodeStage extends AbstractStage {
                          0b110, // CSRRSI
                          0b111  // CSRRCI
                             -> {
+                        this.nextReg.setRl((byte) rs1);
                         this.nextReg.setLeft(this.hart.registers.read(rs1));
                         this.nextReg.setRight(imm);
                         this.nextReg.setRd((byte) rd);
@@ -160,7 +167,7 @@ public class DecodeStage extends AbstractStage {
                         this.nextReg.setALUOp(ALUOp.None.toByte());
                     }
                     default -> {
-                        this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                        onIllegalInstruction();
                         return;
                     }
                 }
@@ -168,11 +175,12 @@ public class DecodeStage extends AbstractStage {
             case JALR -> {
                 logger.log("Processing type I: %s", opcode);
                 if (funct3 != 0) {
-                    this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                    onIllegalInstruction();
                     return;
                 }
 
                 int imm = BinaryUtil.intFromBits(instruction, 20, 12, true);
+                this.nextReg.setRl((byte) rs1);
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
                 this.nextReg.setDisp(imm);
@@ -182,6 +190,7 @@ public class DecodeStage extends AbstractStage {
             case OP_IMM -> {
                 logger.log("Processing type I: %s", opcode);
                 int imm = BinaryUtil.intFromBits(instruction, 20, 12, true);
+                this.nextReg.setRl((byte) rs1);
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
                 this.nextReg.setRd((byte) rd);
@@ -203,7 +212,7 @@ public class DecodeStage extends AbstractStage {
                     else if ((imm >> 5) != 0) parsed = ALUOp.None;
                 }
                 if (parsed == ALUOp.None) {
-                    this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                    onIllegalInstruction();
                     return;
                 }
 
@@ -214,8 +223,10 @@ public class DecodeStage extends AbstractStage {
                 int imm = BinaryUtil.intFromBits(instruction, 7, 5, false);
                 imm |= BinaryUtil.intFromBits(instruction, 25, 7, false) << 5;
                 imm = BinaryUtil.sext(imm, 11);
+                this.nextReg.setRl((byte) rs1);
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
+                this.nextReg.setRsv((byte) rs2);
                 this.nextReg.setStrval(this.hart.registers.read(rs2));
                 this.nextReg.setALUOp(ALUOp.Add.toByte());
                 switch (funct3) {
@@ -223,7 +234,7 @@ public class DecodeStage extends AbstractStage {
                     case (0b001) -> this.nextReg.setMemop((byte) 0b110);
                     case (0b010) -> this.nextReg.setMemop((byte) 0b111);
                     default -> {
-                        this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                        onIllegalInstruction();
                         return;
                     }
                 }
@@ -235,7 +246,9 @@ public class DecodeStage extends AbstractStage {
                 imm |= BinaryUtil.intFromBits(instruction, 7, 1, false) << 11;
                 imm |= BinaryUtil.intFromBits(instruction, 31, 1, false) << 12;
                 imm = BinaryUtil.sext(imm, 12);
+                this.nextReg.setRl((byte) rs1);
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
+                this.nextReg.setRr((byte) rs2);
                 this.nextReg.setRight(this.hart.registers.read(rs2));
                 this.nextReg.setDisp(imm);
                 this.nextReg.setALUOp(ALUOp.Sub.toByte());
@@ -255,10 +268,12 @@ public class DecodeStage extends AbstractStage {
                 logger.log("Processing type R: %s", opcode);
                 ALUOp op = decodeRType(funct3, funct7);
                 if (op == ALUOp.None) {
-                    this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                    onIllegalInstruction();
                     return;
                 }
+                this.nextReg.setRl((byte) rs1);
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
+                this.nextReg.setRr((byte) rs2);
                 this.nextReg.setRight(this.hart.registers.read(rs2));
                 this.nextReg.setALUOp(op.toByte());
                 this.nextReg.setRd((byte) rd);
@@ -293,14 +308,16 @@ public class DecodeStage extends AbstractStage {
                 };
 
                 if (amoOp == AMOOp.INVALID) {
-                    this.hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                    onIllegalInstruction();
                     return;
                 }
 
                 this.nextReg.setAMOOp(amoOp.toByte());
                 this.nextReg.setAMORl((byte) rl);
                 this.nextReg.setAMOAq((byte) aq);
+                this.nextReg.setRl((byte) rs1);
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
+                this.nextReg.setRsv((byte) rs2);
                 this.nextReg.setStrval(this.hart.registers.read(rs2));
                 this.nextReg.setRd((byte) rd);
             }
@@ -310,20 +327,29 @@ public class DecodeStage extends AbstractStage {
             this.hart.stages[0].needToFreeze = true;
             this.needToNOP = true;
         }
+
+        // TODO: check for dependencies on registers written to by WRITE
+        //      - SFENCE.VMA (actually I don't think this one writes to anything)
+        //      - CSR instructions
+        //      - System calls (a0)
     }
 
     public void falling() {
-        if (this.hart.status != HartStatus.RUNNING) return;
-
         logger.log("Running falling edge for decode stage for hart #%d", this.hart.id);
+        
         if (this.needToNOP) {
             this.hart.pipelineRegisters[1].setNextToNop();
             this.needToNOP = false;
         }
+        
         if (this.needToFreeze) {
             this.needToFreeze = false;
         } else {
             this.hart.pipelineRegisters[1].tick();
         }
+    }
+    
+    private void onIllegalInstruction() {
+        VirtualMachine.getInstance().parkHart(this.hart.id, HartStatus.ILLEGAL_INSTRUCTION);
     }
 }
