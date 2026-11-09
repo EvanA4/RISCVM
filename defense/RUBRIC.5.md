@@ -11,11 +11,9 @@ Does the Part V code compile and is the execute stage factored into its own sour
 | A3 | Compiles only after trivial fixes (missing include/import, one typo), OR execute is not separated into its own file. | -0.5 |
 | A4 | Does not compile; requires nontrivial edits to build. | -0.5 (and verify remaining categories by code reading only) |
 
-I believe I have earned full marks for this category. 
+I believe I have earned full marks for this category. The program runs to completion when ran according to the README. You can find the execute stage in `machine/stage/ExecuteStage.java`. No external dependencies affect the lifetime of the pipeline.
 
 ## Category B — Core ALU Operations (5.0 pts)
-
-Takes the `aluop` field and computes `result` for every supported operation, with correct signed/unsigned behavior.
 
 | Step | Criterion | Deduction |
 | --- | --- | --- |
@@ -24,6 +22,10 @@ Takes the `aluop` field and computes `result` for every supported operation, wit
 | B3 | Divide-by-zero or signed-overflow (`INT_MIN / -1`) not handled to the RISC-V defined result, OR one arithmetic group (e.g., all shifts, or Mul) systematically wrong. | -2.5 |
 | B4 | Two or more operation groups wrong, OR the ALU inspects the instruction/opcode instead of dispatching purely on `aluop`. | -3.5 |
 | B5 | ALU does not meaningfully compute results from `aluop`. | -4.5 |
+
+I believe I have earned full marks for this category. The `ALU` class can be found in `machine/ALU.java`. Lines 19-63 contain a switch statement which handles each `ALUOp` by case, including unsigned operations. Divide-by-zero yields -1, and line 75 shows how overflows are captured with the appropriate logic. Lines 56-58 confirm that shifts are masked with a 5-bit mask.
+
+Line 82 shows how the ALU uses `left` and `right` to compute values. Line 131 takes the `result` variable which stores the ALU's output and throws it into a pipeline register.
 
 ## Category C — NZCV Flags and Comparison/Branch Conditions (4.0 pts)
 
@@ -37,6 +39,12 @@ Derives the NZCV status flags from the ALU result and produces the correct compa
 | C4 | Branch/comparison conditions not derived from the SUB result/flags (e.g., separate hand-written comparisons that disagree with the flags), OR two or more conditions systematically wrong. | -3.0 |
 | C5 | NZCV flags and comparison conditions not meaningfully produced. | -3.5 |
 
+I believe I have earned full marks for this category. The `ALU` class can be found in `machine/ALU.java`. Lines 24 and 29 both indicate that SLT and SLTU both call on the same `executeSub` function for properly computing values.
+
+The `updateNegativeAndZero` function from lines 92-95 compute the N and Z flags for an operation. Moreover, the `executeAdd` and `executeSub` functions compute the result, C, and V in lines 68-90.
+
+Branch conditions were covered in `machine/stage/ExecuteStage.java`. Lines 90-101 contain a switch statement which covers all six branch conditions for determining whether a branch is taken.
+
 ## Category D — Load/Store Address Calculation (3.0 pts)
 
 For LOAD and STORE, the ALU computes base + offset via ADD, independent of the instruction, and hands the address forward in `result`.
@@ -47,6 +55,12 @@ For LOAD and STORE, the ALU computes base + offset via ADD, independent of the i
 | D2 | Address computed correctly, but the execute stage inspects the opcode/instruction to special-case load/store instead of relying on the `aluop` set by decode. | -1.0 |
 | D3 | One error: offset not sign-extended (works only for positive offsets), OR base/offset swapped in a way the test set tolerates. | -1.5 |
 | D4 | Address not computed by an ADD (wrong operation), OR not placed in `result` where the memory stage can consume it. | -2.5 |
+
+I believe I have earned full marks for this category.
+
+The decode stage is in `machine/stage/DecodeStage.java`. At lines 106 and 231, both LOAD and STORE are set to use `ALUOp.ADD`, respectively. Lines 100 and 225 show that the immediate used as `right` is always sign extended for both LOAD and STORE, respectively.
+
+Revisiting the execute stage in `machine/stage/ExecuteStage.java`, line 82 shows how the ALU uses `left` and `right` to compute values. At no point in this stage do I specify to the ALU to use a particular `ALUOp` because the current instruction is a LOAD or STORE. It simply fetches pipeline register values, applies forwarding where necessary from lines 36-79. 
 
 ## Category E — Operand Forwarding (3.5 pts)
 
@@ -60,6 +74,10 @@ Resolves read-after-write data hazards by forwarding the most recent in-flight r
 | E4 |  | -2.25 |
 | E5 | No operand forwarding; dependent instructions consume stale register-file values. | -3.0 |
 
+I believe I have earned full marks for this category.
+
+The execute stage is in `machine/stage/ExecuteStage.java`. It simply fetches pipeline register values, applies forwarding where necessary from lines 36-79. I use switch statements starting at 53 and 69 to confirm I am only forwarding from instructions which support it. Moreover, lines 57 and 73 confirm that the `rd` I'm forwarding from is not `0`.
+
 ## Category F — Stalling and the Load-Use Hazard (2.0 pts)
 
 Detects the load-use hazard (which forwarding cannot cover) and stalls exactly one cycle, injecting a bubble and freezing the front end.
@@ -71,6 +89,16 @@ Detects the load-use hazard (which forwarding cannot cover) and stalls exactly o
 | F3 | Stall mechanism present but the front end is not frozen correctly (PC advances or the decode latch is overwritten), so an instruction is dropped or duplicated on the stall. | -1.0 |
 | F4 | Load-use hazard not detected (relies on forwarding alone, which cannot deliver the not-yet-loaded value), so the consumer reads a stale/undefined value. | -1.5 |
 | F5 | No stalling mechanism of any kind. | -2.0 |
+
+I believe I have earned full marks for this category.
+
+The `Hart` class in `machine/Hart.java` covers load-use hazard detection in the method `hasLoadUseHazard`. This function can be found between lines 58 and 87, performing a partial decode for both the fetch/decode and execute/memory latches to check whether there is a register-write dependency.
+
+The decode stage is in `machine/stage/DecodeStage.java`. Lines 326-329 account for the load-use hazard by requesting a NOP from its own stage and requesting a freeze from the FETCH stage. Lines 340-343 overwrites its previous work in the rising stage with a NOP.
+
+The fetch stage is in `machine/stage/FetchStage.java` and tries to account for this freeze request in lines 63-68. Those lines provide an `if` statement which prevents the pipeline register from ticking and reverts the program counter to its original value. 
+
+Once the freezing has occurred, forwarding happens as per usual in the `ExecuteStage` as described earlier in this document.
 
 ## Category G — Branch Resolution in Execute (2.0 pts)
 
@@ -84,6 +112,10 @@ Resolves branches/jumps in the execute stage, compares against the fetch-stage p
 | G4 | Branch outcome computed but not compared against the prediction (no squash/redirect), so mispredicted paths execute wrong instructions, OR resolution uses stale (non-forwarded) operands for the condition. | -1.5 |
 | G5 | Branches not resolved in execute in any usable way. | -2.0 |
 
+I believe I have earned full marks for this category.
+
+The execute stage is in `machine/stage/ExecuteStage.java`. Line 90 starts a massive switch statement, considering all six branch conditions and ALU flags when determining if a branch is taken. Line 105 computes the `actualNextPC` if the branch is actually taken. Line 106 updates the branch prediction table based on the `actualNextPC`. Lines 122-127 check whether `actualNextPC` matches `prevReg.getPredictedNextPc()`; if not, the stage updates the hart's program counter and requests NOPs from both the fetch and decode stages.
+
 ## Score Summary
 
 | Category | Max | Earned |
@@ -96,7 +128,3 @@ Resolves branches/jumps in the execute stage, compares against the fetch-stage p
 | F — Stalling & the Load-Use Hazard | 2.0 | 2.0 |
 | G — Branch Resolution in Execute | 2.0 | 2.0 |
 | **Total** | **20.0** | **20.0** |
-
----
-
-*Last updated: 2026-10-27 14:37:36 -0400*

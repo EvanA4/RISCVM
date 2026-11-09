@@ -10,7 +10,7 @@ public final class ALU {
     private boolean overflow;
 
     public int execute(ALUOp op, int a, int b) {
-        // Clear flags unless an operation below defines them.
+        // Assume false for all NZCV
         negative = false;
         zero = false;
         carry = false;
