@@ -1,6 +1,7 @@
 package net.eabbott.riscvm.machine;
 
 import net.eabbott.riscvm.context.Context;
+import net.eabbott.riscvm.machine.instruction.Instruction;
 import net.eabbott.riscvm.machine.instruction.Opcode;
 import net.eabbott.riscvm.machine.memory.MemoryManager;
 import net.eabbott.riscvm.machine.register.CSRFile;
@@ -53,36 +54,6 @@ public class Hart {
         this.threads = new Thread[5];
         for (int i = 0; i < 5; ++i) threads[i] = new StageThread(this.stages[i]);
         for (int i = 0; i < 5; ++i) threads[i].start();
-    }
-
-    public boolean hasLoadUseHazard() {
-        byte[] decodeInst = pipelineRegisters[0].getInst();
-        byte[] executeInst = pipelineRegisters[1].getInst();
-
-        if (decodeInst.length == 0 || executeInst.length == 0) return false;
-
-        int executeOpcodeBits =
-                BinaryUtil.intFromBits(executeInst, 0, 7, false);
-        if (Opcode.fromInt(executeOpcodeBits) != Opcode.LOAD) return false;
-
-        int rd = BinaryUtil.intFromBits(executeInst, 7, 5, false);
-        if (rd == 0) return false;
-
-        int decodeOpcodeBits =
-                BinaryUtil.intFromBits(decodeInst, 0, 7, false);
-        Opcode decodeOpcode = Opcode.fromInt(decodeOpcodeBits);
-        if (decodeOpcode == null) return false;
-
-        int rs1 = BinaryUtil.intFromBits(decodeInst, 15, 5, false);
-        boolean usesRs2 = switch (decodeOpcode) {
-            case OP, STORE, BRANCH, AMO -> true;
-            default -> false;
-        };
-        int rs2 = usesRs2
-                ? BinaryUtil.intFromBits(decodeInst, 20, 5, false)
-                : -1;
-
-        return rs1 == rd || rs2 == rd;
     }
 }
 

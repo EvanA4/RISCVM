@@ -5,6 +5,7 @@ import net.eabbott.riscvm.machine.HartStatus;
 import net.eabbott.riscvm.machine.SystemCall;
 import net.eabbott.riscvm.machine.SystemOpcode;
 import net.eabbott.riscvm.machine.VirtualMachine;
+import net.eabbott.riscvm.machine.instruction.Instruction;
 import net.eabbott.riscvm.machine.instruction.Opcode;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.util.BinaryUtil;
@@ -32,17 +33,21 @@ public class WriteStage extends AbstractStage {
     @Override
     public void rising() {
         logger.log("Running rising edge for write stage for hart #%d", hart.id);
+    }
 
-        byte[] inst = prevReg.getInst();
-        int funct7 = BinaryUtil.intFromBits(inst, 25, 7, false);
-        int raw = BinaryUtil.intFromBytesLE(inst, 0, 4);
-        Opcode opcode = Opcode.fromInt(raw & 0x7f);
+    @Override
+    public void falling() {
+        logger.log("Running falling edge for write stage for hart #%d", hart.id);
+
+        Instruction instruction = new Instruction(prevReg.getInst());
 
         // Perform system call (or lack thereof)
-        boolean isECALL = opcode == Opcode.SYSTEM && raw == 0x00000073;
+        boolean isECALL = instruction.isECALL();
         int callNumber = isECALL ? hart.registers.read(17) : -1;
         SystemOpcode callOp = SystemOpcode.fromValue(callNumber);
 
+        // Make a "system call" even if one isn't provided
+        // Saturates the CyclicBarrier
         int result = VirtualMachine.getInstance().systemCall(
             new SystemCall(
                 hart.id,
@@ -62,22 +67,15 @@ public class WriteStage extends AbstractStage {
         }
 
         // SFENCE.VMA
-        else if (opcode == Opcode.SYSTEM && funct7 == 0b0001001) {
+        else if (instruction.isSFENCE()) {
             hart.memman.sfenceVma(prevReg.getLeft(), prevReg.getRight());
         }
-
-        // TODO: CSR instructions here...
 
         // Normal operations
         else {
             writeRegister = Byte.toUnsignedInt(prevReg.getRd());
             writeValue = prevReg.getResult();
         }
-    }
-
-    @Override
-    public void falling() {
-        logger.log("Running falling edge for write stage for hart #%d", hart.id);
 
         hart.registers.write(writeRegister, writeValue);
     }

@@ -43,10 +43,10 @@ public class CSRFile {
         switch (csr) {
             case M_HART_ID -> { return this.mHartID; }
             case SATP -> { return context.allowMMU ? this.satp : 0; }
-            case CYCLE -> { return this.time; }
-            case CYCLE_H -> { return this.timeH; }
-            case TIME -> { return this.cycle; }
-            case TIME_H -> { return this.cycleH; }
+            case TIME -> { return this.time; }
+            case TIME_H -> { return this.timeH; }
+            case CYCLE -> { return this.cycle; }
+            case CYCLE_H -> { return this.cycleH; }
             case INSTRET -> { return this.instret; }
             case INSTRET_H -> { return this.instretH; }
             default -> throw new IllegalArgumentException(
@@ -69,9 +69,23 @@ public class CSRFile {
     }
 
     /*
-    * Updates the read only CSRs.
+    * Updates the read only cycle counter CSRs.
     * */
-    public void tick() {
-        // update values for read-only values here
+    public void incrementCycle() {
+        if (this.cycle++ == -1) {
+            this.cycleH++;
+        }
+    }
+
+    public void incrementInstret() {
+        if (this.instret++ == -1) {
+            this.instretH++;
+        }
+    }
+
+    public void updateTime() {
+        long unixSeconds = java.time.Instant.now().getEpochSecond();
+        this.time = (int) unixSeconds;
+        this.timeH = (int) (unixSeconds >>> 32);
     }
 }

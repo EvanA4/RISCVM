@@ -7,7 +7,7 @@ package net.eabbott.riscvm.machine.register;
 public class PipelineRegister {
     public byte[][] inst;
     public int[] pc, predictedNextPc, left, right, result, disp, strval;
-    public byte[] rl, rr, rsv, rd, memop, aluop, amoop, amorl, amoaq;
+    public byte[] rd, memop, aluop, amoop, amorl, amoaq;
 
     public PipelineRegister() {
         this.inst = new byte[][]{
@@ -21,9 +21,6 @@ public class PipelineRegister {
         this.disp = new int[2];
         this.strval = new int[2];
         this.predictedNextPc = new int[2];
-        this.rl = new byte[2];
-        this.rr = new byte[2];
-        this.rsv = new byte[2];
         this.rd = new byte[2];
         this.memop = new byte[2];
         this.aluop = new byte[2];
@@ -44,9 +41,6 @@ public class PipelineRegister {
         this.result[1] = this.result[0];
         this.disp[1] = this.disp[0];
         this.strval[1] = this.strval[0];
-        this.rl[1] = this.rl[0];
-        this.rr[1] = this.rr[0];
-        this.rsv[1] = this.rsv[0];
         this.rd[1] = this.rd[0];
         this.memop[1] = this.memop[0];
         this.aluop[1] = this.aluop[0];
@@ -63,9 +57,6 @@ public class PipelineRegister {
         this.result[0] = 0;
         this.disp[0] = 0;
         this.strval[0] = 0;
-        this.rl[0] = 0;
-        this.rr[0] = 0;
-        this.rsv[0] = 0;
         this.rd[0] = 0;
         this.memop[0] = 0;
         this.aluop[0] = 0;
@@ -84,9 +75,6 @@ public class PipelineRegister {
         this.result[0] = 0;
         this.disp[0] = 0;
         this.strval[0] = 0;
-        this.rl[0] = 0;
-        this.rr[0] = 0;
-        this.rsv[0] = 0;
         this.rd[0] = 0;
         this.memop[0] = 0;
         this.aluop[0] = 0;
@@ -164,30 +152,6 @@ public class PipelineRegister {
 
     public void setStrval(int strval) {
         this.strval[0] = strval;
-    }
-
-    public byte getRl() {
-        return rl[1];
-    }
-
-    public void setRl(byte rl) {
-        this.rl[0] = rl;
-    }
-
-    public byte getRr() {
-        return rr[1];
-    }
-
-    public void setRr(byte rr) {
-        this.rr[0] = rr;
-    }
-
-    public byte getRsv() {
-        return rr[1];
-    }
-
-    public void setRsv(byte rsv) {
-        this.rsv[0] = rsv;
     }
 
     public byte getRd() {

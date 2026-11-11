@@ -5,9 +5,9 @@ import net.eabbott.riscvm.machine.HartStatus;
 import net.eabbott.riscvm.machine.VirtualMachine;
 import net.eabbott.riscvm.machine.instruction.ALUOp;
 import net.eabbott.riscvm.machine.instruction.AMOOp;
+import net.eabbott.riscvm.machine.instruction.Instruction;
 import net.eabbott.riscvm.machine.instruction.Opcode;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
-import net.eabbott.riscvm.util.BinaryUtil;
 import net.eabbott.riscvm.util.VMLogger;
 
 /*
@@ -17,46 +17,17 @@ public class DecodeStage extends AbstractStage {
     private final VMLogger logger = VMLogger.getInstance();
     private final Hart hart;
     private final PipelineRegister prevReg, nextReg;
+    private final boolean allowM;
+    private final boolean allowA;
 
     public DecodeStage(Hart hart) {
         this.hart = hart;
         this.prevReg = this.hart.pipelineRegisters[0];
         this.nextReg = this.hart.pipelineRegisters[1];
-    }
 
-    ALUOp decodeRType(int funct3, int funct7) {
-        // M extension
-        if (funct7 == 0x01) {
-            return switch (funct3) {
-                case 0b000 -> ALUOp.Mul;
-                case 0b100 -> ALUOp.Div;
-                case 0b101 -> ALUOp.DivU;
-                case 0b110 -> ALUOp.Rem;
-                case 0b111 -> ALUOp.RemU;
-                default -> ALUOp.None;
-            };
-        }
-
-        // Base instructions
-        return switch (funct3) {
-            case 0b000 -> switch (funct7) {
-                case 0x00 -> ALUOp.Add;
-                case 0x20 -> ALUOp.Sub;
-                default -> ALUOp.None;
-            };
-            case 0b001 -> funct7 == 0 ? ALUOp.LeftShift : ALUOp.None;
-            case 0b010 -> funct7 == 0 ? ALUOp.SLT : ALUOp.None;
-            case 0b011 -> funct7 == 0 ? ALUOp.SLTU : ALUOp.None;
-            case 0b100 -> funct7 == 0 ? ALUOp.Xor : ALUOp.None;
-            case 0b101 -> switch (funct7) {
-                case 0x00 -> ALUOp.RightShiftL;
-                case 0x20 -> ALUOp.RightShiftA;
-                default -> ALUOp.None;
-            };
-            case 0b110 -> funct7 == 0 ? ALUOp.Or : ALUOp.None;
-            case 0b111 -> funct7 == 0 ? ALUOp.And : ALUOp.None;
-            default -> ALUOp.None;
-        };
+        VirtualMachine machine = VirtualMachine.getInstance();
+        this.allowM = machine.context.allowRV32M;
+        this.allowA = machine.context.allowRV32A;
     }
 
     public void rising() {
@@ -67,8 +38,8 @@ public class DecodeStage extends AbstractStage {
         logger.log("Running rising edge for decode stage for hart #%d", this.hart.id);
 
         // Fetch raw instruction bytes from pipeline register
-        byte[] instruction = this.prevReg.getInst();
-        if (instruction.length == 0) {
+        byte[] instBytes = this.prevReg.getInst();
+        if (instBytes.length == 0) {
             logger.log("No instruction register yet for hart #%d.", this.hart.id);
             return;
         }
@@ -76,9 +47,10 @@ public class DecodeStage extends AbstractStage {
         this.nextReg.setInst(this.prevReg.getInst());
         this.nextReg.setPredictedNextPc(this.prevReg.getPredictedNextPc());
 
+        Instruction instruction = new Instruction(instBytes);
+
         // Fetch opcode from raw instruction bytes
-        int opcodeNum = BinaryUtil.intFromBits(instruction, 0, 7, false);
-        Opcode opcode = Opcode.fromInt(opcodeNum);
+        Opcode opcode = instruction.opcode();
         if (opcode == null) {
             logger.log("Found illegal instruction opcode for hart #%d.", this.hart.id);
             onIllegalInstruction();
@@ -86,19 +58,17 @@ public class DecodeStage extends AbstractStage {
         }
 
         // Generic processing
-        int rd = BinaryUtil.intFromBits(instruction, 7, 5, false);
-        int funct3 = BinaryUtil.intFromBits(instruction, 12, 3, false);
-        int rs1 = BinaryUtil.intFromBits(instruction, 15, 5, false);
-        int rs2 = BinaryUtil.intFromBits(instruction, 20, 5, false);
-        int funct7 = BinaryUtil.intFromBits(instruction, 25, 7, false);
+        int rd = instruction.rd();
+        int funct3 = instruction.funct3();
+        int rs1 = instruction.rs1();
+        int rs2 = instruction.rs2();
 
         // Case-by-case processing
         switch (opcode) {
             case LOAD -> {
                 logger.log("Processing type I: %s", opcode);
 
-                int imm = BinaryUtil.intFromBits(instruction, 20, 12, true);
-                this.nextReg.setRl((byte) rs1);
+                int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
                 this.nextReg.setRd((byte) rd);
@@ -107,8 +77,8 @@ public class DecodeStage extends AbstractStage {
 
                 // Parse memop
                 switch (funct3) {
-                    case 0b000 -> this.nextReg.setMemop((byte) 0b001); // Byte
-                    case 0b001 -> this.nextReg.setMemop((byte) 0b010); // Half-word
+                    case 0b000, 0b100 -> this.nextReg.setMemop((byte) 0b001); // Byte/LBU
+                    case 0b001, 0b101 -> this.nextReg.setMemop((byte) 0b010); // Half-word/LHU
                     case 0b010 -> this.nextReg.setMemop((byte) 0b011); // Word
                     default -> {
                         onIllegalInstruction();
@@ -119,25 +89,20 @@ public class DecodeStage extends AbstractStage {
             case SYSTEM -> {
                 logger.log("Processing type I: %s", opcode);
 
-                int imm = BinaryUtil.intFromBits(instruction, 20, 12, false);
+                int imm = instruction.imm();
 
                 if (funct3 == 0b000) {
                     // ECALL
-                    if (instruction[0] == 0x73
-                            && instruction[1] == 0x00
-                            && instruction[2] == 0x00
-                            && instruction[3] == 0x00) {
+                    if (instruction.isECALL()) {
                         this.nextReg.setRd((byte) 0);
                         this.nextReg.setMemop((byte) 0);
                         this.nextReg.setALUOp(ALUOp.None.toByte());
                         break;
                     }
 
-                    // SFENCE.VMA encoding: funct7=0b0001001, rd=0, funct3=0, rs1 and rs2 are operands
-                    if (funct7 == 0b0001001 && rd == 0) {
-                        this.nextReg.setRl((byte) rs1);
+                    // SFENCE.VMA
+                    if (instruction.isSFENCE()) {
                         this.nextReg.setLeft(this.hart.registers.read(rs1));
-                        this.nextReg.setRr((byte) rs2);
                         this.nextReg.setRight(this.hart.registers.read(rs2));
                         this.nextReg.setRd((byte) 0);
                         this.nextReg.setMemop((byte) 0);
@@ -150,26 +115,16 @@ public class DecodeStage extends AbstractStage {
                 }
 
                 // CSR instructions
-                switch (funct3) {
-                    case 0b001, // CSRRW
-                         0b010, // CSRRS
-                         0b011, // CSRRC
-                         0b101, // CSRRWI
-                         0b110, // CSRRSI
-                         0b111  // CSRRCI
-                            -> {
-                        this.nextReg.setRl((byte) rs1);
-                        this.nextReg.setLeft(this.hart.registers.read(rs1));
-                        this.nextReg.setRight(imm);
-                        this.nextReg.setRd((byte) rd);
-                        this.nextReg.setDisp(imm);
-                        this.nextReg.setMemop((byte) 0);
-                        this.nextReg.setALUOp(ALUOp.None.toByte());
-                    }
-                    default -> {
-                        onIllegalInstruction();
-                        return;
-                    }
+                if (instruction.csrOp() != null) {
+                    this.nextReg.setLeft(this.hart.registers.read(rs1));
+                    this.nextReg.setRight(imm);
+                    this.nextReg.setRd((byte) rd);
+                    this.nextReg.setDisp(imm);
+                    this.nextReg.setMemop((byte) 0);
+                    this.nextReg.setALUOp(ALUOp.None.toByte());
+                } else {
+                    onIllegalInstruction();
+                    return;
                 }
             }
             case JALR -> {
@@ -179,8 +134,7 @@ public class DecodeStage extends AbstractStage {
                     return;
                 }
 
-                int imm = BinaryUtil.intFromBits(instruction, 20, 12, true);
-                this.nextReg.setRl((byte) rs1);
+                int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
                 this.nextReg.setDisp(imm);
@@ -189,28 +143,12 @@ public class DecodeStage extends AbstractStage {
             }
             case OP_IMM -> {
                 logger.log("Processing type I: %s", opcode);
-                int imm = BinaryUtil.intFromBits(instruction, 20, 12, true);
-                this.nextReg.setRl((byte) rs1);
+                int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
                 this.nextReg.setRd((byte) rd);
-                this.nextReg.setDisp(imm);
 
-                ALUOp parsed = switch (funct3) {
-                    case 0b000 -> ALUOp.Add;
-                    case 0b001 -> ALUOp.LeftShift;
-                    case 0b010 -> ALUOp.SLT;
-                    case 0b011 -> ALUOp.SLTU;
-                    case 0b100 -> ALUOp.Xor;
-                    case 0b101 -> ALUOp.RightShiftL;
-                    case 0b110 -> ALUOp.Or;
-                    case 0b111 -> ALUOp.And;
-                    default -> ALUOp.None;
-                };
-                if (parsed == ALUOp.RightShiftL) {
-                    if ((imm >> 5) == 0b0100000) parsed = ALUOp.RightShiftA;
-                    else if ((imm >> 5) != 0) parsed = ALUOp.None;
-                }
+                ALUOp parsed = instruction.aluOp();
                 if (parsed == ALUOp.None) {
                     onIllegalInstruction();
                     return;
@@ -220,13 +158,9 @@ public class DecodeStage extends AbstractStage {
             }
             case STORE -> {
                 logger.log("Processing type S: %s", opcode);
-                int imm = BinaryUtil.intFromBits(instruction, 7, 5, false);
-                imm |= BinaryUtil.intFromBits(instruction, 25, 7, false) << 5;
-                imm = BinaryUtil.sext(imm, 11);
-                this.nextReg.setRl((byte) rs1);
+                int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
-                this.nextReg.setRsv((byte) rs2);
                 this.nextReg.setStrval(this.hart.registers.read(rs2));
                 this.nextReg.setALUOp(ALUOp.Add.toByte());
                 switch (funct3) {
@@ -241,72 +175,49 @@ public class DecodeStage extends AbstractStage {
             }
             case BRANCH -> {
                 logger.log("Processing type B: %s", opcode);
-                int imm = BinaryUtil.intFromBits(instruction, 8, 4, false) << 1;
-                imm |= BinaryUtil.intFromBits(instruction, 25, 6, false) << 5;
-                imm |= BinaryUtil.intFromBits(instruction, 7, 1, false) << 11;
-                imm |= BinaryUtil.intFromBits(instruction, 31, 1, false) << 12;
-                imm = BinaryUtil.sext(imm, 12);
-                this.nextReg.setRl((byte) rs1);
+                int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
-                this.nextReg.setRr((byte) rs2);
                 this.nextReg.setRight(this.hart.registers.read(rs2));
                 this.nextReg.setDisp(imm);
                 this.nextReg.setALUOp(ALUOp.Sub.toByte());
             }
             case JAL -> {
                 logger.log("Processing type J: %s", opcode);
-                int imm = BinaryUtil.intFromBits(instruction, 21, 10, false) << 1;
-                imm |= BinaryUtil.intFromBits(instruction, 20, 1, false) << 11;
-                imm |= BinaryUtil.intFromBits(instruction, 12, 8, false) << 12;
-                imm |= BinaryUtil.intFromBits(instruction, 31, 1, false) << 20;
-                imm = BinaryUtil.sext(imm, 20);
-                this.nextReg.setDisp(imm + this.prevReg.getPC());
+                int imm = instruction.imm();
+                this.nextReg.setDisp(imm);
                 this.nextReg.setALUOp(ALUOp.None.toByte());
                 this.nextReg.setRd((byte) rd);
             }
             case OP -> {
                 logger.log("Processing type R: %s", opcode);
-                ALUOp op = decodeRType(funct3, funct7);
-                if (op == ALUOp.None) {
+                ALUOp op = instruction.aluOp();
+                if (op == ALUOp.None || (ALUOp.isM(op) && !this.allowM)) {
                     onIllegalInstruction();
                     return;
                 }
-                this.nextReg.setRl((byte) rs1);
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
-                this.nextReg.setRr((byte) rs2);
                 this.nextReg.setRight(this.hart.registers.read(rs2));
                 this.nextReg.setALUOp(op.toByte());
                 this.nextReg.setRd((byte) rd);
             }
             case AUIPC, LUI -> {
                 logger.log("Processing type U: %s", opcode);
-                int imm = BinaryUtil.intFromBits(instruction, 12, 20, false) << 12;
-                this.nextReg.setLeft(imm);
-                this.nextReg.setRight(opcode == Opcode.LUI ? prevReg.getPC() : 0);
-                this.nextReg.setALUOp(ALUOp.None.toByte());
+                int imm = instruction.imm();
+                this.nextReg.setLeft(opcode == Opcode.LUI ? prevReg.getPC() : 0);
+                this.nextReg.setRight(imm);
+                this.nextReg.setALUOp(ALUOp.Add.toByte());
                 this.nextReg.setRd((byte) rd);
             }
             case AMO -> {
                 logger.log("Processing type A: %s", opcode);
-                int rl = BinaryUtil.intFromBits(instruction, 25, 1, false);
-                int aq = BinaryUtil.intFromBits(instruction, 26, 1, false);
-                int funct5 = BinaryUtil.intFromBits(instruction, 27, 5, false);
+                if (!this.allowA) {
+                    onIllegalInstruction();
+                    return;
+                }
 
-                AMOOp amoOp = switch (funct5) {
-                    case 0b00010 -> rs2 == 0 ? AMOOp.LR : AMOOp.INVALID;
-                    case 0b00011 -> AMOOp.SC;
-                    case 0b00001 -> AMOOp.SWAP;
-                    case 0b00000 -> AMOOp.ADD;
-                    case 0b00100 -> AMOOp.XOR;
-                    case 0b01100 -> AMOOp.AND;
-                    case 0b01000 -> AMOOp.OR;
-                    case 0b10000 -> AMOOp.MIN;
-                    case 0b10100 -> AMOOp.MAX;
-                    case 0b11000 -> AMOOp.MINU;
-                    case 0b11100 -> AMOOp.MAXU;
-                    default -> AMOOp.INVALID;
-                };
-
+                int rl = instruction.rl();
+                int aq = instruction.aq();
+                AMOOp amoOp = instruction.amoOp();
                 if (amoOp == AMOOp.INVALID) {
                     onIllegalInstruction();
                     return;
@@ -315,23 +226,47 @@ public class DecodeStage extends AbstractStage {
                 this.nextReg.setAMOOp(amoOp.toByte());
                 this.nextReg.setAMORl((byte) rl);
                 this.nextReg.setAMOAq((byte) aq);
-                this.nextReg.setRl((byte) rs1);
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
-                this.nextReg.setRsv((byte) rs2);
                 this.nextReg.setStrval(this.hart.registers.read(rs2));
                 this.nextReg.setRd((byte) rd);
             }
         }
 
-        if (this.hart.hasLoadUseHazard()) {
+        // Check for hazards
+        int left = instruction.leftR();
+        int right = instruction.rightR();
+        int strval = instruction.strvalR();
+
+        // Check for load-use hazard
+        boolean hasLoadUseHazard = false;
+        Instruction execInst = new Instruction(this.hart.pipelineRegisters[1].getInst());
+        int execRd = execInst.rd();
+        if (execInst.opcode() == Opcode.LOAD && execRd != 0) {
+            hasLoadUseHazard = execRd == left
+                || execRd == right
+                || execRd == strval;
+        }
+
+        // Stall if load-use hazard
+        if (hasLoadUseHazard) {
             this.hart.stages[0].needToFreeze = true;
             this.needToNOP = true;
         }
 
-        // TODO: check for dependencies on registers written to by WRITE
-        //      - SFENCE.VMA (actually I don't think this one writes to anything)
-        //      - CSR instructions
-        //      - System calls (a0)
+        // If one of current instruction's registers is number 10, stall if ECALL in pipeline
+        if (
+            instruction.leftR() == 10
+                || instruction.rightR() == 10
+                || instruction.strvalR() == 10
+        ) {
+            for (int i = 1; i <= 3; ++i) {
+                Instruction current = new Instruction(this.hart.pipelineRegisters[i].getInst());
+                if (current.isECALL()) {
+                    this.hart.stages[0].needToFreeze = true;
+                    this.needToNOP = true;
+                }
+            }
+        }
     }
 
     public void falling() {

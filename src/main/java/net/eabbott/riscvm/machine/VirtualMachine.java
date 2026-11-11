@@ -124,6 +124,7 @@ public class VirtualMachine {
         this.harts[id].memman.invalidateAll();
         for (int i = 0; i < 4; ++i) {
             this.harts[id].stages[i].needToNOP = true;
+            // Don't freeze here, let NOP flush out read-only halves of pipeline registers
         }
         if (++numParkedHarts == harts.length) isExiting = true;
     }
@@ -136,11 +137,6 @@ public class VirtualMachine {
         this.harts[id].csrFile.write(CSRFile.SATP, satp);
         this.harts[id].programCounter = pc;
         this.harts[id].registers.write(13, a3);
-        for (int i = 0; i < 4; ++i) {
-            // One final NOP/freeze request to clear falling edge
-            this.harts[id].stages[i].needToNOP = true;
-            this.harts[id].stages[i].needToFreeze = true;
-        }
         --numParkedHarts;
     }
 
@@ -168,15 +164,7 @@ public class VirtualMachine {
 
 /*
 * TODO:
-* part 5:
-*   operand forwarding
 * part 6:
-*   sign extending loaded memory in MemoryStage if necessary
-*   CSR register file, update variables each clock tick on falling edge?
-*   CSR instructions
-*   write-use stalling (there cannot be a write operation in backend
-*       during DECODE which could affect DECODE's register values, stall if necessary)
-*
 *   AMO operands "rl" and "aq"?? May be satisfied by default.
 *   Accessed/dirty bits for pages in page table entries?
 * */

@@ -32,13 +32,19 @@ public final class ALU {
             }
 
             case Mul -> result = a * b;
+            case MulH ->
+                    result = (int) (((long) a * (long) b) >> 32);
+            case MulHSU ->
+                    result = (int) (((long) a * Integer.toUnsignedLong(b)) >> 32);
+            case MulHU ->
+                    result = (int) ((Integer.toUnsignedLong(a) * Integer.toUnsignedLong(b)) >>> 32);
+
 
             case Div -> result = (b == 0)
                     ? -1
                     : (a == Integer.MIN_VALUE && b == -1
                     ? Integer.MIN_VALUE
                     : a / b);
-
             case DivU -> result = (b == 0)
                     ? -1
                     : Integer.divideUnsigned(a, b);

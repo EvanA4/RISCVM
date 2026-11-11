@@ -17,6 +17,7 @@ public class FetchStage extends AbstractStage {
     private final Hart hart;
     private final PipelineRegister nextReg;
     private int previousCounter = 0;
+    boolean hartWasParked = false;
 
     public FetchStage(Hart hart) {
         this.hart = hart;
@@ -24,7 +25,8 @@ public class FetchStage extends AbstractStage {
     }
 
     public void rising() {
-        if (this.hart.status != HartStatus.RUNNING) {
+        this.hartWasParked = this.hart.status != HartStatus.RUNNING;
+        if (this.hartWasParked) {
             this.needToNOP = true;
         }
 
@@ -55,9 +57,16 @@ public class FetchStage extends AbstractStage {
     public void falling() {
         logger.log("Running falling edge for fetch stage for hart #%d", this.hart.id);
 
+        // Update CSR file
+        this.hart.csrFile.updateTime();
+        if (!this.hartWasParked) this.hart.csrFile.incrementCycle();
+        if (!this.needToNOP && !this.needToFreeze) this.hart.csrFile.incrementInstret();
+
         if (this.needToNOP) {
             this.hart.pipelineRegisters[0].setNextToNop();
             this.needToNOP = false;
+        } else {
+            this.hart.csrFile.incrementInstret();
         }
 
         if (this.needToFreeze) {

@@ -34,7 +34,7 @@ public class MemoryStage extends AbstractStage {
         logger.log("Running rising edge for memory stage for hart #%d", hart.id);
 
         byte[] inst = prevReg.getInst();
-        if (inst.length == 0) return;
+        int funct3 = BinaryUtil.intFromBits(inst, 12, 3, false);
 
         nextReg.setPC(prevReg.getPC());
         nextReg.setInst(inst);
@@ -69,8 +69,12 @@ public class MemoryStage extends AbstractStage {
                 return;
             }
             int value = BinaryUtil.intFromBytesLE(result.data(), 0, size);
-            if (size == 1) value = (byte) value;
-            else if (size == 2) value = (short) value;
+
+            // if not LBU, sign extend
+            if (size == 1 && funct3 != 0b100) value = BinaryUtil.sext(value, 7);
+            // if not LHU, sign extend
+            else if (size == 2 && funct3 != 0b101) value = BinaryUtil.sext(value, 15);
+
             nextReg.setResult(value);
 
         } else if (opcode == Opcode.STORE) {
