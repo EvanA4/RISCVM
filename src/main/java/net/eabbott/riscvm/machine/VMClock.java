@@ -35,10 +35,10 @@ public class VMClock {
         while (!vm.isExiting) {
             try {
                 // Update temporary counter variable
-                if (counter++ == 12) {
-                    vm.isExiting = true;
-                    break;
-                }
+                // if (counter++ == 12) {
+                //     vm.isExiting = true;
+                //     break;
+                // }
 
                 // Sleep for edge
                 Thread.sleep(halfPeriod);
@@ -46,6 +46,12 @@ public class VMClock {
                 // Update clock phase just before waiting
                 switch (this.phase) {
                     case RISING -> {
+                        // Clear previous tick's list of system calls
+                        vm.calls.clear();
+
+                        this.phase = ClockPhase.FALLING;
+                    }
+                    case FALLING -> {
                         // Handle any system calls on main thread
                         // Wait for hart threads to make system calls
                         callBarrier.await();
@@ -55,12 +61,6 @@ public class VMClock {
 
                         // Notify harts' threads of completion
                         callBarrier.await();
-
-                        this.phase = ClockPhase.FALLING;
-                    }
-                    case FALLING -> {
-                        // Clear tick's list of system calls
-                        vm.calls.clear();
 
                         this.phase = ClockPhase.RISING;
                     }
