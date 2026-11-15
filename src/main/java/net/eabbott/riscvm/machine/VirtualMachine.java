@@ -6,6 +6,7 @@ import net.eabbott.riscvm.machine.memory.cache.L3Cache;
 import net.eabbott.riscvm.machine.memory.virtual.TLB;
 import net.eabbott.riscvm.machine.register.CSRFile;
 import net.eabbott.riscvm.util.Nullable;
+import net.eabbott.riscvm.util.VMLogger;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -18,6 +19,7 @@ import java.util.concurrent.locks.ReentrantLock;
 * */
 public class VirtualMachine {
     private static VirtualMachine instance;
+    private VMLogger logger;
     public boolean isExiting = false;
 
     public final ConcurrentNavigableMap<Integer, SystemCall> calls =
@@ -25,7 +27,6 @@ public class VirtualMachine {
     public int[] callResults;
 
     public Hart[] harts;
-    public int numParkedHarts = 0;
     public Context context;
     public VMClock clock;
     public RAM ram;
@@ -34,6 +35,7 @@ public class VirtualMachine {
 
     public static @Nullable VirtualMachine create(Context context) {
         instance = new VirtualMachine();
+        instance.logger = VMLogger.getInstance();
         instance.context = context;
         instance.ram = new RAM(context.ramSize);
         instance.l3 = new L3Cache(context.l3Cache, instance.ram);
@@ -83,6 +85,8 @@ public class VirtualMachine {
         Arrays.fill(callResults, 0);
         for (SystemCall current : calls.values()) {
             boolean shouldBreak = false;
+            if (current.op() != SystemOpcode.NONE)
+                logger.info("Processing non-trivial call: %s", current.op().name());
             switch (current.op()) {
                 case NONE -> {}
                 case EXIT -> {
@@ -126,7 +130,6 @@ public class VirtualMachine {
             this.harts[id].stages[i].needToNOP = true;
             // Don't freeze here, let NOP flush out read-only halves of pipeline registers
         }
-        if (++numParkedHarts == harts.length) isExiting = true;
     }
 
     /**
@@ -137,7 +140,6 @@ public class VirtualMachine {
         this.harts[id].csrFile.write(CSRFile.SATP, satp);
         this.harts[id].programCounter = pc;
         this.harts[id].registers.write(13, a3);
-        --numParkedHarts;
     }
 
     /**
@@ -165,6 +167,16 @@ public class VirtualMachine {
 /*
 * TODO:
 * part 6:
+*   decode breaks when decoding CSR files, i think you aren't supposed to sign extend imm
+*
 *   AMO operands "rl" and "aq"?? May be satisfied by default.
 *   Accessed/dirty bits for pages in page table entries?
 * */
+
+/*
+./run.sh -i elfs/nothing.elf -harts 1 -mmu off -cL 0 -log v -hz 100000
+
+DEBUG EDITS:
+- FetchStage will NOP if instruction already in pipeline
+    - every stage skips if parsing NOP
+ */

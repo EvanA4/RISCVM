@@ -1,5 +1,7 @@
 package net.eabbott.riscvm.machine.register;
 
+import net.eabbott.riscvm.util.VMLogger;
+
 /*
 * The class representation of a pipeline register. Each pipeline has four of these.
 * A special "tick" function rotates the write-only half of the buffer to the read-only half.
@@ -50,7 +52,7 @@ public class PipelineRegister {
         this.predictedNextPc[1] = this.predictedNextPc[0];
 
         // Flush write-only values
-        this.inst[0] = new byte[0];
+        this.inst[0] = new byte[]{ 0x13, 0x00, 0x00, 0x00 };
         this.pc[0] = 0;
         this.left[0] = 0;
         this.right[0] = 0;
@@ -82,6 +84,32 @@ public class PipelineRegister {
         this.amorl[0] = 0;
         this.amoaq[0] = 0;
         this.predictedNextPc[0] = 0;
+    }
+
+    public void dump(String label) {
+        VMLogger logger = VMLogger.getInstance();
+        logger.lock();
+        try {
+            logger.verbose("Pipeline register \"%s\":", label);
+            logger.verbose("### PIPELINE REGISTER DUMP ###");
+            logger.logBytes(this.inst[1], 4, true);
+            logger.verbose("pc: %d", this.pc[1]);
+            logger.verbose("left: %d", this.left[1]);
+            logger.verbose("right: %d", this.right[1]);
+            logger.verbose("result: %d", this.result[1]);
+            logger.verbose("disp: %d", this.disp[1]);
+            logger.verbose("strval: %d", this.strval[1]);
+            logger.verbose("rd: %d", this.rd[1]);
+            logger.verbose("memop: %d", this.memop[1]);
+            logger.verbose("aluop: %d", this.aluop[1]);
+            logger.verbose("amoop: %d", this.amoop[1]);
+            logger.verbose("amorl: %d", this.amorl[1]);
+            logger.verbose("amoaq: %d", this.amoaq[1]);
+            logger.verbose("predictedNextPc: %d", this.predictedNextPc[1]);
+            logger.verbose("### END OF PIPELINE REGISTER DUMP ###");
+        } finally {
+            logger.unlock();
+        }
     }
 
     /*

@@ -19,7 +19,8 @@ public class Instruction {
      */
     public int imm() {
         return switch (this.opcode()) {
-            case LOAD, SYSTEM, JALR, OP_IMM -> BinaryUtil.intFromBits(this.inst, 20, 12, true);
+            case LOAD, JALR, OP_IMM -> BinaryUtil.intFromBits(this.inst, 20, 12, true);
+            case SYSTEM -> BinaryUtil.intFromBits(this.inst, 20, 12, false);
             case STORE -> {
                 int imm = BinaryUtil.intFromBits(this.inst, 7, 5, false);
                 imm |= BinaryUtil.intFromBits(this.inst, 25, 7, false) << 5;
@@ -135,6 +136,13 @@ public class Instruction {
 
     public boolean isECALL() {
         return this.inst[0] == 0x73
+            && this.inst[1] == 0x00
+            && this.inst[2] == 0x00
+            && this.inst[3] == 0x00;
+    }
+
+    public boolean isNOP() {
+        return this.inst[0] == 0x13
             && this.inst[1] == 0x00
             && this.inst[2] == 0x00
             && this.inst[3] == 0x00;

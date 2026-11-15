@@ -3,11 +3,11 @@ package net.eabbott.riscvm.machine.stage;
 import net.eabbott.riscvm.machine.ALU;
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.machine.HartStatus;
+import net.eabbott.riscvm.machine.VirtualMachine;
 import net.eabbott.riscvm.machine.instruction.ALUOp;
 import net.eabbott.riscvm.machine.instruction.Instruction;
 import net.eabbott.riscvm.machine.instruction.Opcode;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
-import net.eabbott.riscvm.util.BinaryUtil;
 import net.eabbott.riscvm.util.VMLogger;
 
 public class ExecuteStage extends AbstractStage {
@@ -36,7 +36,9 @@ public class ExecuteStage extends AbstractStage {
                 case 0b001, 0b101 -> source;                 // CSRRW, CSRRWI
                 case 0b010, 0b110 -> oldValue | source;      // CSRRS, CSRRSI
                 case 0b011, 0b111 -> oldValue & ~source;     // CSRRC, CSRRCI
-                default -> throw new IllegalArgumentException("Invalid CSR operation");
+                default -> {
+                    throw new IllegalArgumentException("Invalid CSR operation");
+                }
             };
 
             boolean write = switch (funct3) {
@@ -51,20 +53,29 @@ public class ExecuteStage extends AbstractStage {
             }
 
             return oldValue;
+
         } catch (IllegalArgumentException e) {
-            hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+            logger.fatal("Parking from ExecuteStage #1! %s", e.getMessage());
+            VirtualMachine.getInstance().parkHart(this.hart.id, HartStatus.ILLEGAL_INSTRUCTION);
             return 0;
         }
     }
 
     @Override
     public void rising() {
+        // TODO: REMOVE THIS
+        // Instruction tmp = new Instruction(this.prevReg.getInst());
+        // if (tmp.isNOP()) return;
+        // logger.debug("Decode/execute pipeline register:");
+        // this.hart.pipelineRegisters[1].dump("Decode/execute");
+
         if (this.hart.status != HartStatus.RUNNING) {
             this.needToNOP = true;
         }
 
-        logger.log("Running rising edge for execute stage for hart #%d", hart.id);
+        logger.debug("Running rising edge for execute stage for hart #%d", hart.id);
 
+        ((FetchStage) this.hart.stages[0]).overwritePC = -1;
         byte[] instBytes = prevReg.getInst();
         Instruction instruction = new Instruction(instBytes);
         if (instruction.isEmpty()) return;
@@ -77,7 +88,7 @@ public class ExecuteStage extends AbstractStage {
 
         Opcode opcode = instruction.opcode();
         if (opcode == null) {
-            hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+            VirtualMachine.getInstance().parkHart(this.hart.id, HartStatus.ILLEGAL_INSTRUCTION);
             return;
         }
 
@@ -134,7 +145,7 @@ public class ExecuteStage extends AbstractStage {
                 case 0b110 -> !alu.isCarry();                       // BLTU
                 case 0b111 -> alu.isCarry();                        // BGEU
                 default -> {
-                    hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                    VirtualMachine.getInstance().parkHart(this.hart.id, HartStatus.ILLEGAL_INSTRUCTION);
                     yield false;
                 }
             };
@@ -146,7 +157,7 @@ public class ExecuteStage extends AbstractStage {
 
         } else if (opcode == Opcode.JAL) {
             result = pc + 4; // Return address written to rd.
-            actualNextPc = prevReg.getDisp();
+            actualNextPc = pc + prevReg.getDisp();
 
         } else if (opcode == Opcode.JALR) {
             result = pc + 4; // Return address written to rd.
@@ -160,7 +171,8 @@ public class ExecuteStage extends AbstractStage {
         // If actual branch location does not match the predicted, NOP front-end
         if (isControlFlow
                 && actualNextPc != prevReg.getPredictedNextPc()) {
-            hart.programCounter = actualNextPc;
+            logger.verbose("Failed to predict next PC, NOPing FETCH and DECODE!");
+            ((FetchStage) this.hart.stages[0]).overwritePC = actualNextPc;
             this.hart.stages[0].needToNOP = true;
             this.hart.stages[1].needToNOP = true;
         }
@@ -181,7 +193,7 @@ public class ExecuteStage extends AbstractStage {
 
     @Override
     public void falling() {
-        logger.log("Running falling edge for execute stage for hart #%d", hart.id);
+        logger.debug("Running falling edge for execute stage for hart #%d", hart.id);
 
         if (this.needToNOP) {
             this.hart.pipelineRegisters[2].setNextToNop();

@@ -15,12 +15,11 @@ import java.util.*;
 public class Context extends AbstractContext {
     // Define the valid arguments for easy argument validation
     private final String[] VALID_ARGS = {
-            "-f", "-i", "-o", "-m", "-a", "-mem", "-harts", "-hz", "-cL", "-c1",
+            "-log", "-f", "-i", "-o", "-m", "-a", "-mem", "-harts", "-hz", "-cL", "-c1",
             "-c2", "-c3", "-cS1", "-cS2", "-cS3", "-cB1", "-cB2", "-cB3", "-cW1", "-cW2",
             "-cW3", "-cE1", "-cE2", "-cE3", "-cC", "-bp", "-bpD", "-mmu", "-tlb", "-tlbE"
     };
     private final Set<String> VALID_ARGS_SET = new HashSet<>(Arrays.stream(VALID_ARGS).toList());
-    private final VMLogger logger = VMLogger.getInstance();
 
     /*
     * A static method for creating an argument-populated context class with one function call.
@@ -49,7 +48,7 @@ public class Context extends AbstractContext {
             return context;
 
         } catch (Exception e) {
-            VMLogger.getInstance().log("Failed to parse arguments: %s", e.getMessage());
+            IO.println("Failed to parse arguments: " + e.getMessage());
             return null;
         }
     }
@@ -59,39 +58,40 @@ public class Context extends AbstractContext {
     * */
     @Override
     public void dump() {
+        VMLogger logger = VMLogger.getInstance();
         CacheContext[] caches = {this.l1Cache, this.l2Cache, this.l3Cache};
-        logger.log("##### CONTEXT DUMP #####");
-        logger.log("Config file: %s", configFile);
-        logger.log("ELF file: %s", elfFile);
-        logger.log("Output file: %s", outputFile);
-        logger.log("Allow RV32M: %s", allowRV32M);
-        logger.log("Allow RV32A: %s", allowRV32A);
-        logger.log("RAM size: %d", ramSize);
-        logger.log("Number of harts: %d", numHarts);
-        logger.log("Cycle frequency: %d", cycleFrequency);
-        logger.log("Cache depth: %d", cacheDepth);
+        logger.verbose("##### CONTEXT DUMP #####");
+        logger.verbose("Config file: %s", configFile);
+        logger.verbose("ELF file: %s", elfFile);
+        logger.verbose("Output file: %s", outputFile);
+        logger.verbose("Allow RV32M: %s", allowRV32M);
+        logger.verbose("Allow RV32A: %s", allowRV32A);
+        logger.verbose("RAM size: %d", ramSize);
+        logger.verbose("Number of harts: %d", numHarts);
+        logger.verbose("Cycle frequency: %d", cycleFrequency);
+        logger.verbose("Cache depth: %d", cacheDepth);
         for (int i = 0; i < 3; ++i) {
-            logger.log("L%d Cache:", i + 1);
-            logger.log("\tAssociativity: %s", caches[i].ca.type);
-            logger.log("\tWays: %d", caches[i].ca.ways);
-            logger.log("\tSize: %d", caches[i].size);
-            logger.log("\tBlock size: %d", caches[i].blockSize);
-            logger.log("\tWrite policy: %s", caches[i].isWriteBack ? "write-back" : "write-through");
-            logger.log("\tEviction policy: %s", caches[i].eviction);
+            logger.verbose("L%d Cache:", i + 1);
+            logger.verbose("\tAssociativity: %s", caches[i].ca.type);
+            logger.verbose("\tWays: %d", caches[i].ca.ways);
+            logger.verbose("\tSize: %d", caches[i].size);
+            logger.verbose("\tBlock size: %d", caches[i].blockSize);
+            logger.verbose("\tWrite policy: %s", caches[i].isWriteBack ? "write-back" : "write-through");
+            logger.verbose("\tEviction policy: %s", caches[i].eviction);
         }
-        logger.log("Cache coherency: %s", cacheCoherency);
-        logger.log("Branch prediction rows: %d", branchPredictionRows);
-        logger.log("Default prediction: %d", defaultPrediction);
-        logger.log("Allow MMU: %s", allowMMU);
-        logger.log("Number of TLB slots: %d", numTLBSlots);
-        logger.log("TLB eviction Policy: %s", tlbEviction);
-        logger.log("");
-        logger.log("Number of sections: %d", elf.header.phnum);
+        logger.verbose("Cache coherency: %s", cacheCoherency);
+        logger.verbose("Branch prediction rows: %d", branchPredictionRows);
+        logger.verbose("Default prediction: %d", defaultPrediction);
+        logger.verbose("Allow MMU: %s", allowMMU);
+        logger.verbose("Number of TLB slots: %d", numTLBSlots);
+        logger.verbose("TLB eviction Policy: %s", tlbEviction);
+        logger.verbose("");
+        logger.verbose("Number of sections: %d", elf.header.phnum);
         for (var ph : elf.programHeaders) {
-            logger.log("file offset = 0x%x, vaddr = 0x%x, filesz = %d, memsz = %d", ph.offset, ph.vaddr, ph.filesz, ph.memsz);
+            logger.verbose("file offset = 0x%x, vaddr = 0x%x, filesz = %d, memsz = %d", ph.offset, ph.vaddr, ph.filesz, ph.memsz);
         }
-        logger.log("Program counter should be set to 0x%08x", elf.header.entry);
-        logger.log("##### CONTEXT DUMP #####");
+        logger.verbose("Program counter should be set to 0x%08x", elf.header.entry);
+        logger.verbose("##### CONTEXT DUMP #####");
     }
 
     /*
@@ -190,6 +190,9 @@ public class Context extends AbstractContext {
 
             // Unholy arg handling of despair :(
             switch (arg) {
+                case "-log" -> {
+                    this.logLevel = parseLogType(next);
+                }
                 case "-f" -> {
                     this.configFile = next;
                 }
@@ -288,6 +291,22 @@ public class Context extends AbstractContext {
                 }
             }
         }
+    }
+
+    /*
+     * Returns logging level for application.
+     */
+    private LogType parseLogType(String value) {
+        return switch (value.toLowerCase()) {
+            case "v" -> LogType.VERBOSE;
+            case "d" -> LogType.DEBUG;
+            case "i" -> LogType.INFO;
+            case "w" -> LogType.WARNING;
+            case "e" -> LogType.ERROR;
+            case "f" -> LogType.FATAL;
+            case "s" -> LogType.SILENT;
+            default -> throw new IllegalStateException("Invalid logging type: " + value.toLowerCase());
+        };
     }
 
     /*

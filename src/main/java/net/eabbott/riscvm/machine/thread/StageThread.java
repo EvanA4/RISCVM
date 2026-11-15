@@ -35,10 +35,10 @@ public class StageThread extends Thread {
             } catch (InterruptedException e) {
                 break;
             } catch (BrokenBarrierException e) {
-                logger.log("Detected a broken barrier: %s", e.getMessage());
+                logger.debug("Thread interrupted while awaiting barrier, quitting...");
                 break;
             }
         }
-        logger.log("Broke out of stage loop!");
+        logger.debug("Broke out of stage loop!");
     }
 }

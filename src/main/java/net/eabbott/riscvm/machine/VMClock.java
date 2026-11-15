@@ -1,6 +1,6 @@
 package net.eabbott.riscvm.machine;
 
-import net.eabbott.riscvm.util.MachineIO;
+import net.eabbott.riscvm.context.LogType;
 import net.eabbott.riscvm.util.VMLogger;
 
 import java.time.Duration;
@@ -21,7 +21,26 @@ public class VMClock {
     public final CyclicBarrier callBarrier;
 
     public VMClock(int numHarts, long frequency) {
-        this.barrier = new CyclicBarrier(numHarts * 5 + 1);
+        this.barrier = new CyclicBarrier(numHarts * 5 + 1,
+            () -> {
+                // This runs atomically between each clock tick
+                // Update temporary counter variable
+                // if (counter == 245760) {
+                //     VMLogger.getInstance().setLevel(LogType.VERBOSE);
+                // }
+                // if (counter++ == 5000) {
+                //     vm.isExiting = true;
+                // }
+
+                boolean allHartsParked = true;
+                for (Hart hart : vm.harts) {
+                    if (hart.status == HartStatus.RUNNING) allHartsParked = false;
+                }
+                if (allHartsParked) vm.isExiting = true;
+
+                logger.debug("############################ NEW CLOCK TICK ############################");
+            }
+        );
         this.callBarrier = new CyclicBarrier(numHarts + 1);
         double periodNano = 500_000_000. / (double) frequency;
         this.halfPeriod = Duration.ofNanos(Double.valueOf(periodNano).longValue());
@@ -34,12 +53,6 @@ public class VMClock {
         // Keep ticking unless exit requested
         while (!vm.isExiting) {
             try {
-                // Update temporary counter variable
-                // if (counter++ == 12) {
-                //     vm.isExiting = true;
-                //     break;
-                // }
-
                 // Sleep for edge
                 Thread.sleep(halfPeriod);
 
@@ -66,14 +79,21 @@ public class VMClock {
                     }
                 }
 
-                logger.log("New clock tick");
+                if (vm.isExiting) break;
                 barrier.await();
 
             } catch (InterruptedException e) {
                 break;
             } catch (BrokenBarrierException e) {
-                logger.log("Detected a broken barrier: %s", e.getMessage());
+                logger.debug("Detected a broken barrier: %s", e.getMessage());
                 break;
+            }
+        }
+
+        logger.debug("Broke out of clock loop. Requesting for threads to die.");
+        for (Hart hart : vm.harts) {
+            for (Thread thread : hart.threads) {
+                thread.interrupt();
             }
         }
     }

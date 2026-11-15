@@ -14,6 +14,7 @@ public abstract class AbstractContext {
     public @Nullable String elfFile = null;
     public @Nullable ELFContext elf = null;
     public @Nullable String outputFile = null;
+    public LogType logLevel = LogType.SILENT;
     public boolean allowRV32M = true;
     public boolean allowRV32A = true;
     public long ramSize = 1_048_576;

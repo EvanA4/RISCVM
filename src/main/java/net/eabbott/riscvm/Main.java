@@ -10,11 +10,11 @@ import net.eabbott.riscvm.util.VMLogger;
 * */
 public class Main {
     static void main(String[] args) {
-        VMLogger.create();
-
         // Parse arguments, exit if failed
         Context context = Context.parseArgs(args);
         if (context == null) return;
+
+        VMLogger.create(context.logLevel);
         context.dump();
 
         // If arguments were valid, create and run the virtual machine

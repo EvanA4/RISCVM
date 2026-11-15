@@ -1,11 +1,14 @@
 package net.eabbott.riscvm.machine;
 
+import net.eabbott.riscvm.util.VMLogger;
+
 import java.util.Arrays;
 
 /*
 * A class wrapper of the branch target buffer and branch prediction table.
 * */
 public class BranchPredictor {
+    final VMLogger logger = VMLogger.getInstance();
     final int[] branchTargetBuffer; // For jump locations
     final byte[] branchPredictionTable; // For jump predictions
     final boolean enabled;
@@ -31,10 +34,12 @@ public class BranchPredictor {
 
         // Check if entry is in branch target buffer
         int jumpLocation = this.branchTargetBuffer[index];
+        logger.verbose("Jump location from branch predictor for PC %x: %d", programCounter, jumpLocation);
         if (jumpLocation == -1) return -1;
 
         // Check if branch prediction table speculates a jump
         byte prediction = this.branchPredictionTable[index];
+        logger.verbose("Prediction confidence byte for PC %x: %d", programCounter, Byte.toUnsignedInt(prediction));
         if ((prediction & 0b10) == 0) return -1;
 
         // Otherwise, return jump location

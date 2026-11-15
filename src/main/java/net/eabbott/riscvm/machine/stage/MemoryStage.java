@@ -3,6 +3,7 @@ package net.eabbott.riscvm.machine.stage;
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.machine.HartStatus;
 import net.eabbott.riscvm.machine.instruction.AMOOp;
+import net.eabbott.riscvm.machine.instruction.Instruction;
 import net.eabbott.riscvm.machine.instruction.Opcode;
 import net.eabbott.riscvm.machine.memory.AMOResult;
 import net.eabbott.riscvm.machine.memory.cache.MemoryResult;
@@ -27,17 +28,23 @@ public class MemoryStage extends AbstractStage {
 
     @Override
     public void rising() {
+        // TODO: REMOVE THIS
+        // Instruction tmp = new Instruction(this.prevReg.getInst());
+        // if (tmp.isNOP()) return;
+        // logger.debug("Execute/memory pipeline register:");
+        // this.hart.pipelineRegisters[2].dump("Execute/memory");
+
         if (this.hart.status != HartStatus.RUNNING) {
             this.needToNOP = true;
         }
 
-        logger.log("Running rising edge for memory stage for hart #%d", hart.id);
+        logger.debug("Running rising edge for memory stage for hart #%d", hart.id);
 
-        byte[] inst = prevReg.getInst();
-        int funct3 = BinaryUtil.intFromBits(inst, 12, 3, false);
+        Instruction inst = new Instruction(prevReg.getInst());
+        int funct3 = inst.funct3();
 
         nextReg.setPC(prevReg.getPC());
-        nextReg.setInst(inst);
+        nextReg.setInst(prevReg.getInst());
         nextReg.setPredictedNextPc(prevReg.getPredictedNextPc());
         nextReg.setResult(prevReg.getResult());
         nextReg.setRd(prevReg.getRd());
@@ -47,7 +54,7 @@ public class MemoryStage extends AbstractStage {
         nextReg.setAMORl(prevReg.getAMORl());
         nextReg.setAMOAq(prevReg.getAMOAq());
 
-        Opcode opcode = Opcode.fromInt(BinaryUtil.intFromBits(inst, 0, 7, false));
+        Opcode opcode = inst.opcode();
         int memop = prevReg.getMemop() & 0xff;
         long address = Integer.toUnsignedLong(prevReg.getResult());
 
@@ -137,7 +144,7 @@ public class MemoryStage extends AbstractStage {
 
     @Override
     public void falling() {
-        logger.log("Running falling edge for memory stage for hart #%d", hart.id);
+        logger.debug("Running falling edge for memory stage for hart #%d", hart.id);
 
         if (this.needToNOP) {
             this.hart.pipelineRegisters[3].setNextToNop();

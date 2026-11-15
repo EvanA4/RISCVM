@@ -3,6 +3,7 @@ package net.eabbott.riscvm.machine.stage;
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.machine.HartStatus;
 import net.eabbott.riscvm.machine.VirtualMachine;
+import net.eabbott.riscvm.machine.instruction.Instruction;
 import net.eabbott.riscvm.machine.memory.virtual.MemoryFault;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.util.VMLogger;
@@ -18,6 +19,7 @@ public class FetchStage extends AbstractStage {
     private final PipelineRegister nextReg;
     private int previousCounter = 0;
     boolean hartWasParked = false;
+    public int overwritePC = -1;
 
     public FetchStage(Hart hart) {
         this.hart = hart;
@@ -25,12 +27,23 @@ public class FetchStage extends AbstractStage {
     }
 
     public void rising() {
+        // TODO: REMOVE THIS BLOCK WHICH NOPS IF INSTRUCTION IN PIPELINE
+        // for (int i = 0; i < 4; ++i) {
+        //     Instruction instruction = new Instruction(this.hart.pipelineRegisters[i].getInst());
+        //     if (!instruction.isNOP()) {
+        //         logger.debug("Instruction already in pipeline! Skipping...");
+        //         this.needToNOP = true;
+        //         return;
+        //     }
+        // }
+        // logger.debug("No instructions in pipeline! Continuing...");
+
         this.hartWasParked = this.hart.status != HartStatus.RUNNING;
         if (this.hartWasParked) {
             this.needToNOP = true;
         }
 
-        logger.log("Running rising edge for fetch stage for hart #%d", this.hart.id);
+        logger.debug("Running rising edge for fetch stage for hart #%d", this.hart.id);
 
         // Determine program counter
         int currentPC = this.hart.programCounter;
@@ -39,6 +52,10 @@ public class FetchStage extends AbstractStage {
         this.hart.programCounter = nextPC == -1 ? currentPC + 4 : nextPC;
         int predictedNextPc = nextPC == -1 ? currentPC + 4 : nextPC;
         this.nextReg.setPredictedNextPc(predictedNextPc);
+        logger.debug(
+            "Current PC: %d %x    Predicted next PC: %d %x",
+            currentPC, currentPC, predictedNextPc, predictedNextPc
+        );
 
         // Load raw instruction into new instruction register
         byte[] rawInstruction = new byte[]{0x13, 0x00, 0x00, 0x00};
@@ -55,12 +72,15 @@ public class FetchStage extends AbstractStage {
     }
 
     public void falling() {
-        logger.log("Running falling edge for fetch stage for hart #%d", this.hart.id);
+        logger.debug("Running falling edge for fetch stage for hart #%d", this.hart.id);
+        logger.debug("Hart status: %s", this.hart.status.name());
 
         // Update CSR file
         this.hart.csrFile.updateTime();
         if (!this.hartWasParked) this.hart.csrFile.incrementCycle();
         if (!this.needToNOP && !this.needToFreeze) this.hart.csrFile.incrementInstret();
+
+        if (this.overwritePC != -1) this.hart.programCounter = overwritePC;
 
         if (this.needToNOP) {
             this.hart.pipelineRegisters[0].setNextToNop();

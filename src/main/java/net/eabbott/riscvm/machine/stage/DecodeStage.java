@@ -31,16 +31,22 @@ public class DecodeStage extends AbstractStage {
     }
 
     public void rising() {
+        // TODO: REMOVE THIS
+        // Instruction tmp = new Instruction(this.prevReg.getInst());
+        // if (tmp.isNOP()) return;
+        // logger.debug("Fetch/decode pipeline register:");
+        // this.hart.pipelineRegisters[0].dump("Fetch/decode");
+
         if (this.hart.status != HartStatus.RUNNING) {
             this.needToNOP = true;
         }
 
-        logger.log("Running rising edge for decode stage for hart #%d", this.hart.id);
+        logger.debug("Running rising edge for decode stage for hart #%d", this.hart.id);
 
         // Fetch raw instruction bytes from pipeline register
         byte[] instBytes = this.prevReg.getInst();
         if (instBytes.length == 0) {
-            logger.log("No instruction register yet for hart #%d.", this.hart.id);
+            logger.debug("No instruction register yet for hart #%d.", this.hart.id);
             return;
         }
         this.nextReg.setPC(this.prevReg.getPC());
@@ -52,7 +58,7 @@ public class DecodeStage extends AbstractStage {
         // Fetch opcode from raw instruction bytes
         Opcode opcode = instruction.opcode();
         if (opcode == null) {
-            logger.log("Found illegal instruction opcode for hart #%d.", this.hart.id);
+            logger.debug("Found illegal instruction opcode for hart #%d.", this.hart.id);
             onIllegalInstruction();
             return;
         }
@@ -66,7 +72,7 @@ public class DecodeStage extends AbstractStage {
         // Case-by-case processing
         switch (opcode) {
             case LOAD -> {
-                logger.log("Processing type I: %s", opcode);
+                logger.info("Processing type I at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
 
                 int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
@@ -87,7 +93,7 @@ public class DecodeStage extends AbstractStage {
                 }
             }
             case SYSTEM -> {
-                logger.log("Processing type I: %s", opcode);
+                logger.info("Processing type I at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
 
                 int imm = instruction.imm();
 
@@ -128,7 +134,7 @@ public class DecodeStage extends AbstractStage {
                 }
             }
             case JALR -> {
-                logger.log("Processing type I: %s", opcode);
+                logger.info("Processing type I at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
                 if (funct3 != 0) {
                     onIllegalInstruction();
                     return;
@@ -142,7 +148,8 @@ public class DecodeStage extends AbstractStage {
                 this.nextReg.setALUOp(ALUOp.Add.toByte());
             }
             case OP_IMM -> {
-                logger.log("Processing type I: %s", opcode);
+                logger.info("Processing type I at PC %d %x: %s %s",
+                        prevReg.getPC(), prevReg.getPC(), opcode, instruction.isNOP() ? "[NOP]" : "");
                 int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
@@ -157,7 +164,7 @@ public class DecodeStage extends AbstractStage {
                 this.nextReg.setALUOp(parsed.toByte());
             }
             case STORE -> {
-                logger.log("Processing type S: %s", opcode);
+                logger.info("Processing type S at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
                 int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
@@ -174,7 +181,7 @@ public class DecodeStage extends AbstractStage {
                 }
             }
             case BRANCH -> {
-                logger.log("Processing type B: %s", opcode);
+                logger.info("Processing type B at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
                 int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(this.hart.registers.read(rs2));
@@ -182,14 +189,14 @@ public class DecodeStage extends AbstractStage {
                 this.nextReg.setALUOp(ALUOp.Sub.toByte());
             }
             case JAL -> {
-                logger.log("Processing type J: %s", opcode);
+                logger.info("Processing type J at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
                 int imm = instruction.imm();
                 this.nextReg.setDisp(imm);
                 this.nextReg.setALUOp(ALUOp.None.toByte());
                 this.nextReg.setRd((byte) rd);
             }
             case OP -> {
-                logger.log("Processing type R: %s", opcode);
+                logger.info("Processing type R at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
                 ALUOp op = instruction.aluOp();
                 if (op == ALUOp.None || (ALUOp.isM(op) && !this.allowM)) {
                     onIllegalInstruction();
@@ -201,15 +208,15 @@ public class DecodeStage extends AbstractStage {
                 this.nextReg.setRd((byte) rd);
             }
             case AUIPC, LUI -> {
-                logger.log("Processing type U: %s", opcode);
+                logger.info("Processing type U at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
                 int imm = instruction.imm();
-                this.nextReg.setLeft(opcode == Opcode.LUI ? prevReg.getPC() : 0);
+                this.nextReg.setLeft(opcode == Opcode.AUIPC ? prevReg.getPC() : 0);
                 this.nextReg.setRight(imm);
                 this.nextReg.setALUOp(ALUOp.Add.toByte());
                 this.nextReg.setRd((byte) rd);
             }
             case AMO -> {
-                logger.log("Processing type A: %s", opcode);
+                logger.info("Processing type A at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
                 if (!this.allowA) {
                     onIllegalInstruction();
                     return;
@@ -249,16 +256,13 @@ public class DecodeStage extends AbstractStage {
 
         // Stall if load-use hazard
         if (hasLoadUseHazard) {
+            logger.verbose("Load-use hazard detected!");
             this.hart.stages[0].needToFreeze = true;
             this.needToNOP = true;
         }
 
-        // If one of current instruction's registers is number 10, stall if ECALL in pipeline
-        if (
-            instruction.leftR() == 10
-                || instruction.rightR() == 10
-                || instruction.strvalR() == 10
-        ) {
+        // If we're using register number 10, stall if ECALL is later in pipeline
+        if (left == 10 || right == 10 || strval == 10) {
             for (int i = 1; i <= 3; ++i) {
                 Instruction current = new Instruction(this.hart.pipelineRegisters[i].getInst());
                 if (current.isECALL()) {
@@ -267,10 +271,22 @@ public class DecodeStage extends AbstractStage {
                 }
             }
         }
+
+        // Forward from write stage to here if there is a register conflict
+        Instruction writeInst = new Instruction (this.hart.pipelineRegisters[3].getInst());
+        if (writeInst.opcode() != Opcode.SYSTEM) {
+            int writeRd = this.hart.pipelineRegisters[3].getRd();
+            int writeResult = this.hart.pipelineRegisters[3].getResult();
+            if (writeRd != 0) {
+                if (writeRd == left) nextReg.setLeft(writeResult);
+                if (writeRd == right) nextReg.setRight(writeResult);
+                if (writeRd == strval) nextReg.setStrval(writeResult);
+            }
+        }
     }
 
     public void falling() {
-        logger.log("Running falling edge for decode stage for hart #%d", this.hart.id);
+        logger.debug("Running falling edge for decode stage for hart #%d", this.hart.id);
         
         if (this.needToNOP) {
             this.hart.pipelineRegisters[1].setNextToNop();
@@ -286,5 +302,6 @@ public class DecodeStage extends AbstractStage {
     
     private void onIllegalInstruction() {
         VirtualMachine.getInstance().parkHart(this.hart.id, HartStatus.ILLEGAL_INSTRUCTION);
+        this.needToNOP = true;
     }
 }

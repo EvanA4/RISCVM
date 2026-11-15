@@ -9,6 +9,7 @@ import java.io.IOException;
 public class MachineIO {
     private static MachineIO instance;
     private @Nullable FileWriter writer = null;
+    private VMLogger logger = VMLogger.getInstance();
 
     public MachineIO() {
         instance = this;
@@ -38,6 +39,7 @@ public class MachineIO {
     * A basic string formatting log function. Logs to the correct location.
     * */
     public void print(char src) {
+        logger.info("Trying to print character: %c", src);
         if (this.writer != null) {
             try {
                 this.writer.write(src);
