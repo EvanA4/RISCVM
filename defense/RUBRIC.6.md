@@ -15,6 +15,8 @@ own source file(s) as required?
 
 I believe I have earned full credit for this category.
 
+The project currently builds and can even run `nothing.elf` to completion under the right settings. The `MemoryStage` class can be found in `machine/stage/MemoryStage.java`.
+
 ## Category B — Load/Store Execution and Sub-Word Extension (3.0 pts)
 
 For LOAD and STORE only, uses the ALU-computed address in `result`,
@@ -30,6 +32,8 @@ extension for sub-word accesses.
 | B5   | Load/store data not moved to/from memory in a usable way.                                                                                                                                                                                                                                   | -3.0      |
 
 I believe I have earned full credit for this category.
+
+Lines 61-106 of `machine/stage/MemoryStage.java` contain two cases of a switch statement which handle the `LOAD` and `STORE` instructions. Line 59 extracts the relevant address from the `result` property of the pipeline register. Line 101 passes the pipeline register's `strval` property into the write into the memory seam. Lines 80-83 sign-extend for the signed LOAD instructions. Lines 63-65 also check for whether a LOAD needs to load a byte, half-word, or word.
 
 ## Category C — Cache Hierarchy and Lookup (3.0 pts)
 
@@ -47,6 +51,10 @@ correctly.
 
 I believe I have earned full credit for this category.
 
+The L1 and L2 classes were very difficult to implement, especially with all of the configurations possible. Still, these classes can be found in `machine/memory/cache/L1Cache.java` and `machine/memory/cache/L2Cache.java`, respectively. Both classes hold a `BackingStore` property which they can call upon a cache miss. All requests to `BackingStore` classes return a `MemoryResult` object, specifying whether a stall is necessary and what data was fetched. Line 336 in both classes present an example of a read from the `BackingStore`.
+
+The hierarchy of the memory seam can be found in `machine/memory/MemoryManager.java`. Lins 80-92 specify the L1->L2->L3->RAM order. However, command-line arguments can change this order. For example, setting the "cache level" value to 1 automatically causes L1 caches to point directly to RAM. Since all three caches follow the `BackingStore` interface, they can be swapped out in this way to avoid unnecessary calls and prevent bugs.
+
 ## Category D — Associativity and Eviction Policies (2.5 pts)
 
 Implements the per-level cache type (`dm`/`sa`/`fa`) and the eviction
@@ -62,6 +70,10 @@ policy (`fifo`/`lru`/`lfu`) for choosing a victim within a set.
 
 I believe I have earned full credit for this category.
 
+There are two separate cache data classes which obfuscate the cache associativity and eviction policy from the main cache classes. These two classes can be found in `machine/memory/cache/MESICacheData.java` and `machine/memory/cache/SimpleCacheData.java`. Since the L1 and L2 caches need cache coherency, they use the `MESICacheData` class to store their information. This can be seen at line 38 and 59 in `machine/memory/cache/L1Cache.java` and `machine/memory/cache/L2Cache.java`. The L3 cache does not need cache coherency and can be seen using `SimpleCacheData` at `machine/memory/cache/L3Cache:21` and `machine/memory/cache/L3Cache:35`.
+
+The `MESICacheData` and `SimpleCacheData` classes use `MESILine` and `SimpleLine` respectively to store the necessary properties for each eviction policy. Both line types extend the abstract `AbstractCacheLine` class. Lines 28-34 of `machine/memory/cache/AbstractCacheLine.java` defines how lines are compared when determining a victim.
+
 ## Category E — Write Policies (2.0 pts)
 
 Implements write-through vs. write-back per level, with dirty-bit
@@ -75,6 +87,12 @@ tracking and writeback-on-eviction.
 | E4   | Write policy not distinguished (`wt` and `wb` behave identically), OR dirty state not tracked at all.                                                                                                                                                          | -2.0      |
 
 I believe I have earned full credit for this category.
+
+Lines 201-207 of `machine/memory/cache/L1Cache.java` represent one example of a write policy check. Here, the value is attempting to change its local cache's value; if write-back is disabled, the value is immediately written to the backing store as well.
+
+Writeback-on-eviction can also be observed in the `installLine` function found in lines 347-364. Line 349 checks whether the line being modified has MESI state `MODIFIED`. If so, the value is written to the backing store.
+
+These principles can also be seen in `machine/memory/cache/L3Cache.java`. Lines 131-139 check if a writeback is necessary by looking for the dirty flag. Lines 113-118 write-through to the backing store if write-back is disabled.
 
 ## Category F — Cache Coherency (MESI) (3.5 pts)
 
@@ -91,6 +109,12 @@ MESI), with a serialized bus/snoop point.
 
 I believe I have earned full credit for this category.
 
+Cache coherency was the most difficult part to implement for the L1 and L2 caches. As stated earlier, the information for each entry can be found in `machine/memory/cache/MESICacheLine.java`. Line 4 defines the `state` property which holds a `MESI` enum reflecting the entry's current state.
+
+Both the L1 and L2 caches have a static `BUS_LOCK` which can be found on line 20 in `machine/memory/cache/L1Cache.java` and `machine/memory/cache/L2Cache.java`. Lines 369-373 define a `getCoherencyLock` function which either grab a lock for the given block address (directory coherency) or grab the static `BUS_LOCK` object.
+
+Lines 306-330 define how to identify which caches should be interacted with for a coherency update. If-statements clarify that snoopy coherency should search through all of the other caches on the same level, while directory coherency looks for all caches with the same block in its static `DIRECTORY` property.
+
 ## Category G — MMU and TLB (SV32) (3.5 pts)
 
 Translates virtual to physical addresses via an SV32 two-level
@@ -106,6 +130,10 @@ page-table walk, gated by `satp`, with a TLB cache of translations.
 
 I believe I have earned full credit for this category.
 
+The MMU and TLB can be found in `machine/memory/virtual/MMU.java` and `machine/memory/virtual/TLB.java`, respectively. Line 65 in the MMU class file starts a for-loop which ensures a leaf entry is reached either in the first- or second-level page table. Leaf entries are identified by an if-statement at line 82. The TLB class file is smaller, but offers a basic lookup function in `machine/memory/virtual/TLB.java:31-42`.
+
+Lines 105-106 in `machine/memory/MemoryManager.java` provide an example of how an if-statement can be used to conditionally translate an address depending on whether `satp` is non-zero.
+
 ## Category H — Structural Stalls and Multi-Cycle Memory (2.0 pts)
 
 Stalls the pipeline when memory cannot complete in one tick (cache miss,
@@ -120,6 +148,10 @@ data.
 | H4   | Memory treated as always single-cycle (no stall on miss/contention), so the pipeline advances with data that has not actually arrived.                                                                                                                                                                                              | -2.0      |
 
 I believe I have earned full credit for this category.
+
+As stated earlier, calls to `BackingStore` objects always return a `MemoryResult` record. These clarify whether a stall is necessary and what data was fetched (could be `null`). Different situations can cause the `shouldWait` property to be `true`. Lines 58 and 64 in `machine/memory/RAM.java` show how lock contention can cause this. Cache misses can also cause a stall, as can be seen in lines 101-103 in `machine/memory/cache/L3Cache.java`.
+
+Lines 73-77 of `machine/stage/MemoryStage.java` define that, should a LOAD yield a `shouldWait == true`, then a stall ought to be requested. STORE-based stalls can also be seen on line 104. Lines 112, 120, and 140 define the same behavior for AMO operations, too.
 
 ## Score Summary
 
