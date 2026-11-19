@@ -97,13 +97,13 @@ public class VirtualMachine {
                 case GET_CHAR -> callResults[current.hartId()] = context.machineIO.read();
                 case START_HART -> {
                     if (
-                        current.hartId() < 0 ||
-                        current.hartId() >= harts.length ||
+                        current.a0() < 0 ||
+                        current.a0() >= harts.length ||
                         harts[current.a0()].status == HartStatus.RUNNING
                     ) {
-                        callResults[current.hartId()] = 0;
+                        callResults[current.hartId()] = -1;
                     } else {
-                        callResults[current.hartId()] = 1;
+                        callResults[current.hartId()] = 0;
                         unparkHart(current.a0(), current.a1(), current.a2(), current.a3());
                     }
                 }
