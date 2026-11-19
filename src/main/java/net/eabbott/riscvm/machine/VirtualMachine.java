@@ -118,6 +118,18 @@ public class VirtualMachine {
             }
             if (shouldBreak) break;
         }
+
+        // Check if all harts have parked
+        boolean allHaveParked = true;
+        for (Hart hart : harts) {
+            if (hart.status == HartStatus.RUNNING) {
+                allHaveParked = false;
+                break;
+            }
+        }
+        if (allHaveParked) {
+            isExiting = true;
+        }
     }
 
     /**
