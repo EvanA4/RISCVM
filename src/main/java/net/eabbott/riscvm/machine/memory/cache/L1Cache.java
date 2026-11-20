@@ -3,6 +3,7 @@ package net.eabbott.riscvm.machine.memory.cache;
 import net.eabbott.riscvm.context.cache.CacheContext;
 import net.eabbott.riscvm.context.cache.CacheCoherency;
 import net.eabbott.riscvm.machine.memory.BackingStore;
+import net.eabbott.riscvm.util.VMLogger;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -15,6 +16,8 @@ import java.util.concurrent.ConcurrentHashMap;
 * */
 public final class L1Cache implements BackingStore {
     private record InstallationResult(boolean shouldWait, MESILine data) {}
+
+    private final VMLogger logger = VMLogger.getInstance();
 
     // The snoopy bus lock and list of all L1 caches
     private static final Object BUS_LOCK = new Object();
@@ -53,7 +56,7 @@ public final class L1Cache implements BackingStore {
         }
 
         this.hartId = hartId;
-        this.blockSize = context.blockSize;
+        this.blockSize = 1 << context.blockSize;
         this.writeBack = context.isWriteBack;
         this.coherency = Objects.requireNonNull(coherency, "coherency");
         this.lines = new MESICacheData(context);
@@ -126,7 +129,7 @@ public final class L1Cache implements BackingStore {
             synchronized (localLock) {
                 // If block was not found among peers, access backing store
                 if (data == null) {
-                    result = readBackingBlock(block);
+                    result = backingStore.read(block, blockSize);
                     if (result.shouldWait()) return new MemoryResult(true, null);
                     data = result.data();
                 }
@@ -235,7 +238,7 @@ public final class L1Cache implements BackingStore {
 
             // If no peer has the line, access backing store
             if (data == null) {
-                MemoryResult result = readBackingBlock(block);
+                MemoryResult result = backingStore.read(block, blockSize);
                 if (result.shouldWait()) return new MemoryResult(true, null);
                 data = result.data();
             }
@@ -330,23 +333,11 @@ public final class L1Cache implements BackingStore {
     }
 
     /**
-     * Tries to read block from backing store. Should only be called with coherency lock held.
-     */
-    private MemoryResult readBackingBlock(long block) {
-        MemoryResult result = backingStore.read(block, blockSize);
-        if (result == null || result.data().length != blockSize) {
-            throw new IllegalStateException(
-                "Backing store returned an invalid cache block.");
-        }
-        return result;
-    }
-
-    /**
      * Adds a line to the local cache. Should only be called with local lock held.
      */
     private InstallationResult installLine(long block, byte[] data, MESI state) {
         MESILine victim = this.lines.findVictim(block);
-        if (victim.state == MESI.MODIFIED) {
+        if (victim != null && victim.state == MESI.MODIFIED) {
             // Attempt to write the dirty victim to backing store, abort installation if stall requested
             MemoryResult result = backingStore.write(victim.blockAddress, victim.data);
             if (result.shouldWait()) return new InstallationResult(true, null);

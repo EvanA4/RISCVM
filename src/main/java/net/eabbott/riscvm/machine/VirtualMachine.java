@@ -186,7 +186,7 @@ public class VirtualMachine {
 * */
 
 /*
-./run.sh -i elfs/nothing.elf -harts 1 -mmu off -cL 0 -log v -hz 100000
+./run.sh -i elfs/nothing.elf -harts 1 -mmu off -cL 0 -log i -hz 100000
 
 DEBUG EDITS:
 - FetchStage will NOP if instruction already in pipeline

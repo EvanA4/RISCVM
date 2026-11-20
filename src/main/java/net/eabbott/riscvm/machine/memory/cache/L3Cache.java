@@ -30,7 +30,7 @@ public final class L3Cache implements BackingStore {
                 "Cache size and block size must be positive.");
         }
 
-        this.blockSize = context.blockSize;
+        this.blockSize = 1 << context.blockSize;
         this.writeBack = context.isWriteBack;
         this.lines = new SimpleCacheData(context);
     }
