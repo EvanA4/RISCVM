@@ -67,7 +67,7 @@ public class ExecuteStage extends AbstractStage {
         // Instruction tmp = new Instruction(this.prevReg.getInst());
         // if (tmp.isNOP()) return;
         // logger.debug("Decode/execute pipeline register:");
-        // this.hart.pipelineRegisters[1].dump("Decode/execute");
+        this.hart.pipelineRegisters[1].dump("Decode/execute");
 
         if (this.hart.status != HartStatus.RUNNING) {
             this.needToNOP = true;

@@ -22,6 +22,8 @@ public class Main {
         if (vm == null) return;
 
         vm.start();
+
+        System.exit(vm.exitCode);
     }
 }
 

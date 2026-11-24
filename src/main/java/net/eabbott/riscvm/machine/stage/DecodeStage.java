@@ -35,7 +35,7 @@ public class DecodeStage extends AbstractStage {
         // Instruction tmp = new Instruction(this.prevReg.getInst());
         // if (tmp.isNOP()) return;
         // logger.debug("Fetch/decode pipeline register:");
-        // this.hart.pipelineRegisters[0].dump("Fetch/decode");
+        this.hart.pipelineRegisters[0].dump("Fetch/decode");
 
         if (this.hart.status != HartStatus.RUNNING) {
             this.needToNOP = true;

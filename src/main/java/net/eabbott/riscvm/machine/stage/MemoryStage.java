@@ -32,7 +32,7 @@ public class MemoryStage extends AbstractStage {
         // Instruction tmp = new Instruction(this.prevReg.getInst());
         // if (tmp.isNOP()) return;
         // logger.debug("Execute/memory pipeline register:");
-        // this.hart.pipelineRegisters[2].dump("Execute/memory");
+        this.hart.pipelineRegisters[2].dump("Execute/memory");
 
         if (this.hart.status != HartStatus.RUNNING) {
             this.needToNOP = true;

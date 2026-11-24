@@ -21,6 +21,7 @@ public class VirtualMachine {
     private static VirtualMachine instance;
     private VMLogger logger;
     public boolean isExiting = false;
+    public int exitCode = 0;
 
     public final ConcurrentNavigableMap<Integer, SystemCall> calls =
         new ConcurrentSkipListMap<>();
@@ -90,6 +91,7 @@ public class VirtualMachine {
             switch (current.op()) {
                 case NONE -> {}
                 case EXIT -> {
+                    exitCode = current.a0();
                     isExiting = true;
                     shouldBreak = true;
                 }
