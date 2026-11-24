@@ -72,6 +72,7 @@ public class MemoryStage extends AbstractStage {
 
             MemoryResult result = hart.memman.read(address, size, AccessType.LOAD);
             if (result.shouldWait()) {
+                logger.warning("Memory manager requested a stall for LOAD!");
                 setStall();
                 return;
             }
@@ -101,7 +102,10 @@ public class MemoryStage extends AbstractStage {
                 Arrays.copyOfRange(BinaryUtil.bytesFromIntLE(prevReg.getStrval()), 0, size),
                 AccessType.STORE
             );
-            if (result.shouldWait()) setStall();
+            if (result.shouldWait()) {
+                logger.warning("Memory manager requested a stall for STORE of %d at %d!", prevReg.getStrval(), address);
+                setStall();
+            }
 
         } else if (opcode == Opcode.AMO) {
             AMOOp operation = AMOOp.fromByte(prevReg.getAMOOp());

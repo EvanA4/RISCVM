@@ -60,11 +60,6 @@ public class WriteStage extends AbstractStage {
         boolean isECALL = snapInst.isECALL();
         int callNumber = isECALL ? hart.registers.read(17) : -1;
         SystemOpcode callOp = SystemOpcode.fromValue(callNumber);
-        if (isECALL) {
-            logger.info("a7: %d    a5: %s",
-                    hart.registers.read(17), (char) (hart.registers.read(15) & 0xFF));
-            logger.info("callNumber: %d yields %s", callNumber, callOp.name());
-        }
 
         // Make a "system call" even if one isn't provided
         // Saturates the CyclicBarrier

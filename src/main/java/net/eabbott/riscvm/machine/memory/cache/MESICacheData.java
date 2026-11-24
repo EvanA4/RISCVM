@@ -2,6 +2,7 @@ package net.eabbott.riscvm.machine.memory.cache;
 
 import net.eabbott.riscvm.context.cache.CacheAssociativityType;
 import net.eabbott.riscvm.context.cache.CacheContext;
+import net.eabbott.riscvm.util.VMLogger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,13 +12,15 @@ import java.util.concurrent.ConcurrentHashMap;
 public class MESICacheData {
     private final CacheContext context;
     private final int numLines;
+    private final int blockSize;
     private Map<Long, MESILine> faLines = null;
     private List<Map<Long, MESILine>> saLines = null;
     private List<MESILine> daLines = null;
 
     public MESICacheData(CacheContext context) {
         this.context = context;
-        this.numLines = Math.toIntExact(context.size / context.blockSize);
+        this.blockSize = 1 << context.blockSize;
+        this.numLines = Math.toIntExact(context.size / blockSize);
         switch (context.ca.type) {
             case DIRECT_MAPPED -> {
                 this.daLines = new ArrayList<>(this.numLines);
@@ -58,13 +61,17 @@ public class MESICacheData {
         return switch (this.context.ca.type) {
             case DIRECT_MAPPED -> {
                 int index = Math.floorMod(
-                        Math.floorDiv(block, this.context.blockSize), this.daLines.size());
-                if (daLines.get(index) == null) yield false;
-                else yield daLines.get(index).blockAddress == block;
+                        Math.floorDiv(block, this.blockSize), this.daLines.size());
+                if (daLines.get(index) == null) {
+                    yield false;
+                }
+                else {
+                    yield daLines.get(index).blockAddress == block;
+                }
             }
             case SET_ASSOC -> {
                 int index = Math.floorMod(
-                        Math.floorDiv(block, this.context.blockSize), this.saLines.size());
+                        Math.floorDiv(block, this.blockSize), this.saLines.size());
                 Map<Long, MESILine> map = saLines.get(index);
                 yield map.containsKey(block);
             }
@@ -80,12 +87,12 @@ public class MESICacheData {
         return switch (this.context.ca.type) {
             case DIRECT_MAPPED -> {
                 int index = Math.floorMod(
-                    Math.floorDiv(block, this.context.blockSize), this.daLines.size());
+                    Math.floorDiv(block, this.blockSize), this.daLines.size());
                 yield daLines.get(index);
             }
             case SET_ASSOC -> {
                 int index = Math.floorMod(
-                    Math.floorDiv(block, this.context.blockSize), this.saLines.size());
+                    Math.floorDiv(block, this.blockSize), this.saLines.size());
                 Map<Long, MESILine> map = saLines.get(index);
                 yield map.get(block);
             }
@@ -100,12 +107,12 @@ public class MESICacheData {
         switch (this.context.ca.type) {
             case DIRECT_MAPPED -> {
                 int index = Math.floorMod(
-                    Math.floorDiv(line.blockAddress, this.context.blockSize), this.daLines.size());
+                    Math.floorDiv(line.blockAddress, this.blockSize), this.daLines.size());
                 daLines.set(index, line);
             }
             case SET_ASSOC -> {
                 int index = Math.floorMod(
-                    Math.floorDiv(line.blockAddress, this.context.blockSize), this.saLines.size());
+                    Math.floorDiv(line.blockAddress, this.blockSize), this.saLines.size());
                 Map<Long, MESILine> map = saLines.get(index);
                 map.put(line.blockAddress, line);
             }
@@ -123,7 +130,7 @@ public class MESICacheData {
     public MESILine findVictim(long block) {
         if (this.context.ca.type == CacheAssociativityType.DIRECT_MAPPED) {
             int index = Math.floorMod(
-                Math.floorDiv(block, this.context.blockSize), this.daLines.size());
+                Math.floorDiv(block, this.blockSize), this.daLines.size());
             return daLines.get(index);
         }
 
@@ -132,7 +139,7 @@ public class MESICacheData {
         switch (this.context.ca.type) {
             case SET_ASSOC -> {
                 int index = Math.floorMod(
-                        Math.floorDiv(block, this.context.blockSize), this.saLines.size());
+                        Math.floorDiv(block, this.blockSize), this.saLines.size());
                 map = saLines.get(index);
                 maxSize = this.context.ca.ways;
             }
@@ -167,14 +174,14 @@ public class MESICacheData {
     public void evictBlock(long block) {
         if (this.context.ca.type == CacheAssociativityType.DIRECT_MAPPED) {
             int index = Math.floorMod(
-                Math.floorDiv(block, this.context.blockSize), this.daLines.size());
+                Math.floorDiv(block, this.blockSize), this.daLines.size());
             daLines.set(index, null);
         }
 
         switch (this.context.ca.type) {
             case SET_ASSOC -> {
                 int index = Math.floorMod(
-                    Math.floorDiv(block, this.context.blockSize), this.saLines.size());
+                    Math.floorDiv(block, this.blockSize), this.saLines.size());
                 saLines.get(index).remove(block);
             }
             case FULL_ASSOC -> faLines.remove(block);

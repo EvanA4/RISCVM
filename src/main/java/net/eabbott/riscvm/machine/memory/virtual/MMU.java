@@ -1,15 +1,23 @@
 package net.eabbott.riscvm.machine.memory.virtual;
 
+import net.eabbott.riscvm.machine.memory.cache.MemoryResult;
 import net.eabbott.riscvm.machine.register.CSRFile;
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.machine.VirtualMachine;
+import net.eabbott.riscvm.util.BinaryUtil;
+import net.eabbott.riscvm.util.VMLogger;
 
 public final class MMU {
+    public record TranslateResult(boolean shouldWait, long address){}
+    private record PTEResult(boolean shouldWait, int pte){}
+    private record TLBResult(boolean shouldWait, TLBEntry entry) {}
+
     private static final long ADDRESS_MASK = 0xFFFF_FFFFL;
     private static final long PPN_MASK = 0x3FFFFFL;
     private final TLB tlb;
     private final VirtualMachine machine;
     private final Hart hart;
+    private final VMLogger logger = VMLogger.getInstance();
 
     public MMU(Hart hart) {
         this.hart = hart;
@@ -20,14 +28,16 @@ public final class MMU {
     /**
      * Translates a virtual address and checks that the requested byte range is within physical RAM.
      */
-    public long translate(long address, int size, AccessType access) throws MemoryFault {
+    public TranslateResult translate(long address, int size, AccessType access) throws MemoryFault {
         long va = address & ADDRESS_MASK;
 
         // Find leaf PTE
         TLBEntry entry = tlb.lookup(va);
         if (entry == null) {
-            entry = walkPageTable(va, access);
-            tlb.insert(entry);
+            TLBResult result = walkPageTable(va, access);
+            if (result.shouldWait()) return new TranslateResult(true, 0);
+            tlb.insert(result.entry());
+            entry = result.entry();
         } else {
             checkPermission(entry, va, access);
         }
@@ -36,7 +46,7 @@ public final class MMU {
         long translated = entry.translate(va);
         checkPhysicalBounds(va, translated, size);
 
-        return translated;
+        return new TranslateResult(false, translated);
     }
 
     /**
@@ -53,7 +63,7 @@ public final class MMU {
         }
     }
 
-    private TLBEntry walkPageTable(long va, AccessType access) throws MemoryFault {
+    private TLBResult walkPageTable(long va, AccessType access) throws MemoryFault {
         long currentSatp = this.hart.csrFile.read(CSRFile.SATP);
 
         long rootPpn = currentSatp & PPN_MASK;
@@ -65,7 +75,9 @@ public final class MMU {
         for (int level = 1; level >= 0; level--) {
             int vpnIndex = (level == 1) ? vpn1 : vpn0;
             long pteAddress = (tablePpn << 12) + (vpnIndex * 4L);
-            int pte = readPte(va, pteAddress);
+            PTEResult pteResult = readPte(va, pteAddress);
+            if (pteResult.shouldWait()) return new TLBResult(true, null);
+            int pte = pteResult.pte();
 
             boolean valid = (pte & 0x001) != 0;
             boolean readable = (pte & 0x002) != 0;
@@ -99,7 +111,7 @@ public final class MMU {
                 );
 
                 checkPermission(entry, va, access);
-                return entry;
+                return new TLBResult(false, entry);
             }
 
             // A non-leaf at level 0 cannot lead to another page-table level.
@@ -113,15 +125,21 @@ public final class MMU {
         throw new MemoryFault(access, va, "No valid SV32 translation");
     }
 
-    private int readPte(long va, long pteAddress) throws MemoryFault {
+    private PTEResult readPte(long va, long pteAddress) throws MemoryFault {
         checkPhysicalBounds(va, pteAddress, 4);
         try {
-            byte[] word = this.machine.ram.fetch(pteAddress);
-            return (word[0] & 0xFF)
-                | ((word[1] & 0xFF) << 8)
-                | ((word[2] & 0xFF) << 16)
-                | ((word[3] & 0xFF) << 24);
-        } catch (RuntimeException ex) {
+            // This illegal do-while loop prevents rare cache-conflicts when traversing page tables
+            // Without it, it is possible different PTEs with the same cache index can keep overwriting each other
+            // That creates an infinite loop...
+            MemoryResult result;
+            do {
+                result = this.hart.memman.top.read(pteAddress, 4);
+            } while (result.shouldWait());
+
+            int word = BinaryUtil.intFromBytesLE(result.data(), 0, 4);
+            return new PTEResult(false, word);
+
+        } catch (Exception e) {
             throw new MemoryFault(
                 FaultType.ACCESS_FAULT,
                 va,

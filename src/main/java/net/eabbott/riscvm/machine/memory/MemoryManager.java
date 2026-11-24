@@ -11,6 +11,7 @@ import net.eabbott.riscvm.machine.memory.cache.L1Cache;
 import net.eabbott.riscvm.machine.memory.virtual.AccessType;
 import net.eabbott.riscvm.machine.memory.virtual.MMU;
 import net.eabbott.riscvm.util.BinaryUtil;
+import net.eabbott.riscvm.util.VMLogger;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -102,8 +103,11 @@ public final class MemoryManager {
     }
 
     public MemoryResult read(long address, int size, AccessType accessType) throws MemoryFault {
-        if (this.hart.csrFile.read(CSRFile.SATP) != 0)
-            address = this.mmu.translate(address, size, accessType);
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
+            MMU.TranslateResult translated = this.mmu.translate(address, size, accessType);
+            if (translated.shouldWait()) return new MemoryResult(true, null);
+            else address = translated.address();
+        }
 
         SortedSet<Integer> relevant = stripesForRange(address, size);
         acquireStripes(relevant);
@@ -117,8 +121,14 @@ public final class MemoryManager {
     }
 
     public MemoryResult write(long address, byte[] data, AccessType accessType) throws MemoryFault {
-        if (this.hart.csrFile.read(CSRFile.SATP) != 0)
-            address = this.mmu.translate(address, data.length, accessType);
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
+            MMU.TranslateResult translated = this.mmu.translate(address, data.length, accessType);
+            if (translated.shouldWait()) {
+                VMLogger.getInstance().warning("Requesting wait for write vm translation");
+                return new MemoryResult(true, null);
+            }
+            else address = translated.address();
+        }
 
         SortedSet<Integer> relevant = stripesForRange(address, data.length);
         acquireStripes(relevant);
@@ -132,24 +142,14 @@ public final class MemoryManager {
         return output;
     }
 
-    public byte[] fetch(long address) throws MemoryFault {
-        if (this.hart.csrFile.read(CSRFile.SATP) != 0)
-            address = this.mmu.translate(address, 4, AccessType.FETCH);
-
-        SortedSet<Integer> relevant = stripesForRange(address, 4);
-        acquireStripes(relevant);
-        try {
-            return this.ram.fetch(address);
-        } finally {
-            releaseStripes(relevant);
-        }
-    }
-
     // Atomic-relevant code below:
 
     public AMOResult rmw(long address, IntUnaryOperator func) throws MemoryFault {
-        if (this.hart.csrFile.read(CSRFile.SATP) != 0)
-            address = this.mmu.translate(address, 4, AccessType.AMO);
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
+            MMU.TranslateResult translated = this.mmu.translate(address, 4, AccessType.AMO);
+            if (translated.shouldWait()) return new AMOResult(true, 0);
+            else address = translated.address();
+        }
         checkWordAlignment(address);
 
         SortedSet<Integer> relevant = stripesForRange(address, 4);
@@ -177,8 +177,11 @@ public final class MemoryManager {
     }
 
     public AMOResult loadReserved(long address) throws MemoryFault {
-        if (this.hart.csrFile.read(CSRFile.SATP) != 0)
-            address = this.mmu.translate(address, 4, AccessType.AMO);
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
+            MMU.TranslateResult translated = this.mmu.translate(address, 4, AccessType.AMO);
+            if (translated.shouldWait()) return new AMOResult(true, 0);
+            else address = translated.address();
+        }
         checkWordAlignment(address);
 
         SortedSet<Integer> relevant = stripesForRange(address, 4);
@@ -200,8 +203,11 @@ public final class MemoryManager {
     }
 
     public AMOResult storeConditional(long address, int value) throws MemoryFault {
-        if (this.hart.csrFile.read(CSRFile.SATP) != 0)
-            address = this.mmu.translate(address, 4, AccessType.AMO);
+        if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
+            MMU.TranslateResult translated = this.mmu.translate(address, 4, AccessType.AMO);
+            if (translated.shouldWait()) return new AMOResult(true, 0);
+            else address = translated.address();
+        }
         checkWordAlignment(address);
 
         SortedSet<Integer> relevant = stripesForRange(address, 4);

@@ -180,17 +180,12 @@ public class VirtualMachine {
 
 /*
 * TODO:
-* part 6:
-*   decode breaks when decoding CSR files, i think you aren't supposed to sign extend imm
-*
-*   AMO operands "rl" and "aq"?? May be satisfied by default.
-*   Accessed/dirty bits for pages in page table entries?
+*   - MMU should be able to requests stalls
+*   - Fetch stage should be able to insert bubbles if stalls are necessary
+*   - All hart statuses should be reachable
+*       - check if all memory fault exceptions are caught
 * */
 
 /*
 ./run.sh -i elfs/nothing.elf -harts 1 -mmu off -cL 0 -log i -hz 100000
-
-DEBUG EDITS:
-- FetchStage will NOP if instruction already in pipeline
-    - every stage skips if parsing NOP
  */

@@ -88,7 +88,9 @@ public final class L1Cache implements BackingStore {
             int count = Math.min(size - copied, blockSize - offset);
 
             MemoryResult result = readBlockRange(block, offset, count);
-            if (result.shouldWait()) return new MemoryResult(true, null);
+            if (result.shouldWait()) {
+                return new MemoryResult(true, null);
+            }
 
             System.arraycopy(result.data(), 0, output, copied, count);
             copied += count;

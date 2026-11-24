@@ -75,11 +75,4 @@ public class RAM implements BackingStore {
         }
         return new MemoryResult(true, null);
     }
-
-    /**
-     * Fetches 32-bit instruction at address.
-     */
-    public byte[] fetch(long address) {
-        return segment.asSlice(address, 4).toArray(java.lang.foreign.ValueLayout.JAVA_BYTE);
-    }
 }

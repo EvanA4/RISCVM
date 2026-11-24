@@ -23,6 +23,7 @@ public class Main {
 
         vm.start();
 
+        VMLogger.getInstance().fatal("Exiting with code %d", vm.exitCode);
         System.exit(vm.exitCode);
     }
 }
