@@ -144,6 +144,18 @@ public class VirtualMachine {
             this.harts[id].stages[i].needToNOP = true;
             // Don't freeze here, let NOP flush out read-only halves of pipeline registers
         }
+
+        // If all harts have parked, update exit code if hart parked from error
+        boolean allHaveParked = true;
+        for (Hart hart : harts) {
+            if (hart.status == HartStatus.RUNNING) {
+                allHaveParked = false;
+                break;
+            }
+        }
+        if (allHaveParked && cause != HartStatus.STOPPED) {
+            exitCode = 1;
+        }
     }
 
     /**
