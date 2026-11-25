@@ -97,7 +97,7 @@ public class MemoryStage extends AbstractStage {
 
             // If stall was requested, pocket the result
             if (result.shouldWait() > 0) {
-                logger.warning("Memory manager requested %d stalls for LOAD at %d with result %d!", result.shouldWait(), address, value);
+                logger.verbose("Memory manager requested %d stalls for LOAD at %d with result %d!", result.shouldWait(), address, value);
                 setStall();
                 toWait = result.shouldWait() - 1;
                 memoryResult = value;
@@ -125,12 +125,13 @@ public class MemoryStage extends AbstractStage {
                 AccessType.STORE
             );
             if (result.shouldWait() > 0) {
-                logger.warning("Memory manager requested %d stalls for STORE of %d at %d!", prevReg.getStrval(), address);
+                logger.verbose("Memory manager requested %d stalls for STORE of %d at %d!", result.shouldWait(), prevReg.getStrval(), address);
                 setStall();
                 toWait = result.shouldWait() - 1;
-
-                // excluding prevents unnecessary passing of memoryResult to pipeline register
-                // startedWaiting = true;
+                memoryResult = 0;
+                startedWaiting = true;
+            } else {
+                logger.verbose("STORE finished without requesting any stalls. Yay.");
             }
 
         } else if (opcode == Opcode.AMO) {

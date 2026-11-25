@@ -3,6 +3,7 @@ package net.eabbott.riscvm.machine.memory.cache;
 import net.eabbott.riscvm.context.cache.CacheContext;
 import net.eabbott.riscvm.context.cache.CacheEvictionPolicy;
 import net.eabbott.riscvm.machine.memory.BackingStore;
+import net.eabbott.riscvm.util.VMLogger;
 
 import java.util.Arrays;
 import java.util.Objects;
@@ -12,6 +13,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * A block-based cache shared by all harts. It has no cache-coherence protocol.
  */
 public final class L3Cache implements BackingStore {
+    private VMLogger logger = VMLogger.getInstance();
     private record FetchResult(int shouldWait, SimpleLine data){}
     private static final ReentrantLock LOCK = new ReentrantLock();
     
@@ -64,10 +66,12 @@ public final class L3Cache implements BackingStore {
     }
 
     @Override
-    public synchronized MemoryResult write(long address, byte[] data) {
+    public MemoryResult write(long address, byte[] data) {
         Objects.requireNonNull(data, "data");
 
+        logger.verbose("L3 CACHE: trying to acquire static lock.");
         LOCK.lock();
+        logger.verbose("L3 CACHE: acquired static lock.");
         try {
             int toWait = LOCK.getQueueLength();
 
@@ -84,10 +88,13 @@ public final class L3Cache implements BackingStore {
                 copied += count;
             }
 
+            logger.verbose("L3 CACHE: finished write and requesting %d stall(s).", toWait);
             return new MemoryResult(toWait, null);
 
         } finally {
+            logger.verbose("L3 CACHE: trying to unlock.");
             LOCK.unlock();
+            logger.verbose("L3 CACHE: finished unlocking.");
         }
     }
 
@@ -132,6 +139,7 @@ public final class L3Cache implements BackingStore {
         }
 
         System.arraycopy(source, sourceOffset, line.data, offset, count);
+        if (writeBack) line.dirty = true;
         return new MemoryResult(toWait, null);
     }
 

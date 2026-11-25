@@ -170,7 +170,7 @@ public final class L2Cache implements BackingStore {
 
     private MemoryResult writeBlockRange(
             long block, int offset, byte[] source, int sourceOffset, int count) {
-        logger.warning("[%d] L2 CACHE: writeBlockRange block %d, offset %d, %d-byte source, src-offset %d, count %d",
+        logger.verbose("[%d] L2 CACHE: writeBlockRange block %d, offset %d, %d-byte source, src-offset %d, count %d",
                 hartId, block, offset, source.length, sourceOffset, count);
 
         int toWait = 0;
@@ -179,9 +179,9 @@ public final class L2Cache implements BackingStore {
         synchronized (localLock) {
             MESILine line = lines.read(block);
 
-            if (line == null) logger.warning("[%d] L2 CACHE: Fetched null from L2 cache for block %d", hartId, block);
+            if (line == null) logger.verbose("[%d] L2 CACHE: Fetched null from L2 cache for block %d", hartId, block);
             else {
-                logger.warning("[%d] L2 CACHE: Fetched line of block %d and state %s using block %d", hartId, line.blockAddress, line.state.name(), block);
+                logger.verbose("[%d] L2 CACHE: Fetched line of block %d and state %s using block %d", hartId, line.blockAddress, line.state.name(), block);
             }
 
             if (isValid(line)
@@ -189,10 +189,11 @@ public final class L2Cache implements BackingStore {
                     || line.state == MESI.EXCLUSIVE)) {
                 // Try a write-through, abort if stall requested
                 if (!writeBack) {
-                    logger.warning("[%d] L2 CACHE: no writeBack, updating backing store", hartId);
+                    logger.verbose("[%d] L2 CACHE: no writeBack, updating backing store", hartId);
                     byte[] newBlock = line.data.clone();
                     System.arraycopy(source, sourceOffset, newBlock, offset, count);
                     MemoryResult result = backingStore.write(block, newBlock);
+                    logger.verbose("[%d] L2 CACHE: updated backing store for %d stall(s).", hartId, result.shouldWait());
                     toWait += result.shouldWait();
                     line.state = MESI.EXCLUSIVE;
                 }
@@ -203,11 +204,12 @@ public final class L2Cache implements BackingStore {
                 if (line.state == MESI.EXCLUSIVE && writeBack) {
                     line.state = MESI.MODIFIED;
                 }
+                logger.verbose("[%d] L2 CACHE: updated local cache to match backing store.", hartId);
 
                 return new MemoryResult(toWait, null);
             }
         }
-        logger.warning("[%d] L2 CACHE: Local write not possible", hartId);
+        logger.verbose("[%d] L2 CACHE: Local write not possible", hartId);
 
         // Painful scenario: local write is not possible, MESI operation needed
         synchronized (this.getCoherencyLock(block)) {
@@ -220,7 +222,7 @@ public final class L2Cache implements BackingStore {
                 {
                     // Try a write-through, abort if stall requested
                     if (!writeBack) {
-                        logger.warning("[%d] L2 CACHE: no writeBack, updating backing store", hartId);
+                        logger.verbose("[%d] L2 CACHE: no writeBack, updating backing store", hartId);
                         byte[] newBlock = line.data.clone();
                         System.arraycopy(source, sourceOffset, newBlock, offset, count);
                         MemoryResult result = backingStore.write(block, newBlock);
@@ -238,7 +240,7 @@ public final class L2Cache implements BackingStore {
                     return new MemoryResult(toWait, null);
                 }
             }
-            logger.warning("[%d] L2 CACHE: Local write STILL not possible", hartId);
+            logger.verbose("[%d] L2 CACHE: Local write STILL not possible", hartId);
 
             // MESI operation is still needed :(
             byte[] data;
@@ -251,16 +253,16 @@ public final class L2Cache implements BackingStore {
 
             // If line not in cache, look for line across peers
             if (data == null) {
-                logger.warning("[%d] L2 CACHE: Attempting to fetch line from peers", hartId);
+                logger.verbose("[%d] L2 CACHE: Attempting to fetch line from peers", hartId);
                 MemoryResult result = findPeerData(block);
                 toWait += 1 + result.shouldWait();
                 data = result.data();
             }
-            logger.warning("[%d] L2 CACHE: Finished peer fetch check.", hartId);
+            logger.verbose("[%d] L2 CACHE: Finished peer fetch check.", hartId);
 
             // If no peer has the line AND IT IS NOT SHARED, access backing store
             if (data == null) {
-                logger.warning("[%d] L2 CACHE: Peer fetch attempt yielded nothing, reading from backing store...", hartId);
+                logger.verbose("[%d] L2 CACHE: Peer fetch attempt yielded nothing, reading from backing store...", hartId);
                 MemoryResult result = backingStore.read(block, blockSize);
                 toWait += 1 + result.shouldWait();
                 data = result.data();
@@ -272,10 +274,31 @@ public final class L2Cache implements BackingStore {
 
             // Finally, read to local cache and request stall
             synchronized (localLock) {
-                logger.warning("[%d] L2 CACHE: Finally installing line.", hartId);
-                InstallationResult result = installLine(block, data, MESI.EXCLUSIVE);
-                toWait += result.shouldWait();
-                registerDirectoryLine(block, result.data());
+                logger.verbose("[%d] L2 CACHE: Finally installing line.", hartId);
+                InstallationResult instResult = installLine(block, data, MESI.EXCLUSIVE);
+                toWait += instResult.shouldWait();
+                registerDirectoryLine(block, instResult.data());
+                MESILine line = instResult.data();
+
+                // Try a write-through if necessary, abort if stall requested
+                if (!writeBack) {
+                    logger.verbose("[%d] L2 CACHE: no writeBack, updating backing store", hartId);
+                    byte[] newBlock = line.data.clone();
+                    System.arraycopy(source, sourceOffset, newBlock, offset, count);
+                    MemoryResult result = backingStore.write(block, newBlock);
+                    logger.verbose("[%d] L2 CACHE: updated backing store for %d stall(s).", hartId, result.shouldWait());
+                    toWait += result.shouldWait();
+                    line.state = MESI.EXCLUSIVE;
+                }
+
+                System.arraycopy(source, sourceOffset, line.data, offset, count);
+                line.touch(++clock);
+
+                if (line.state == MESI.EXCLUSIVE && writeBack) {
+                    line.state = MESI.MODIFIED;
+                }
+
+                logger.verbose("[%d] L2 CACHE: Finished write, requesting %d stall(s).", hartId, toWait);
                 return new MemoryResult(toWait, null);
             }
         }
