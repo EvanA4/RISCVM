@@ -34,7 +34,7 @@ public class DecodeStage extends AbstractStage {
         // TODO: REMOVE THIS
         // Instruction tmp = new Instruction(this.prevReg.getInst());
         // if (tmp.isNOP()) return;
-        // logger.debug("Fetch/decode pipeline register:");
+        logger.debug("Fetch/decode pipeline register:");
         this.hart.pipelineRegisters[0].dump("Fetch/decode");
 
         if (this.hart.status != HartStatus.RUNNING) {
@@ -274,7 +274,8 @@ public class DecodeStage extends AbstractStage {
 
         // Forward from write stage to here if there is a register conflict
         Instruction writeInst = new Instruction (this.hart.pipelineRegisters[3].getInst());
-        if (writeInst.opcode() != Opcode.SYSTEM) {
+        boolean wasCSR = writeInst.opcode() == Opcode.SYSTEM && writeInst.funct3() != 0;
+        if (writeInst.opcode() != Opcode.SYSTEM || wasCSR) {
             int writeRd = this.hart.pipelineRegisters[3].getRd();
             int writeResult = this.hart.pipelineRegisters[3].getResult();
             if (writeRd != 0) {

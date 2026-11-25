@@ -43,6 +43,7 @@ public class WriteStage extends AbstractStage {
 
         // TODO: REMOVE THIS
         // if (snapInst.isNOP()) return;
+
         logger.debug("Memory/write pipeline register:");
         this.hart.pipelineRegisters[3].dump("Memory/write");
 

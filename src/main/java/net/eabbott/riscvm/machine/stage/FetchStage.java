@@ -8,6 +8,7 @@ import net.eabbott.riscvm.machine.memory.cache.MemoryResult;
 import net.eabbott.riscvm.machine.memory.virtual.AccessType;
 import net.eabbott.riscvm.machine.memory.virtual.MemoryFault;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
+import net.eabbott.riscvm.util.BinaryUtil;
 import net.eabbott.riscvm.util.VMLogger;
 
 import java.nio.ByteBuffer;
@@ -71,7 +72,11 @@ public class FetchStage extends AbstractStage {
         }
 
         // If failed to fetch, stall
-        if (result == null || result.shouldWait()) {
+        if (
+            result == null
+                || result.shouldWait()
+                || (result.data() != null && BinaryUtil.intFromBytesLE(result.data(), 0, 4) == 0)
+        ) {
             logger.verbose("Failed to fetch instruction!");
             needToNOP = true;
             hart.programCounter = previousCounter;

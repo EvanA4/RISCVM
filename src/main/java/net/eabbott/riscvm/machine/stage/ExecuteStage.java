@@ -67,7 +67,7 @@ public class ExecuteStage extends AbstractStage {
         // TODO: REMOVE THIS
         // Instruction tmp = new Instruction(this.prevReg.getInst());
         // if (tmp.isNOP()) return;
-        // logger.debug("Decode/execute pipeline register:");
+        logger.debug("Decode/execute pipeline register:");
         this.hart.pipelineRegisters[1].dump("Decode/execute");
 
         if (this.hart.status != HartStatus.RUNNING) {
@@ -99,10 +99,10 @@ public class ExecuteStage extends AbstractStage {
         if (!writeInst.isEmpty()) {
             Opcode writeOpcode = writeInst.opcode();
             if (writeOpcode == null) throw new RuntimeException("writeOpcode is somehow null?");
-            boolean wasCSR = opcode == Opcode.SYSTEM && funct3 != 0;
+            boolean wasCSR = writeOpcode == Opcode.SYSTEM && writeInst.funct3() != 0;
             switch (writeOpcode) {
                 case OP, OP_IMM, LUI, AUIPC, JAL, JALR, AMO, LOAD, SYSTEM -> {
-                    if (opcode == Opcode.SYSTEM && !wasCSR) return; // Filter for non-CSR SYSTEM instructions
+                    if (writeOpcode == Opcode.SYSTEM && !wasCSR) break; // Filter for non-CSR SYSTEM instructions
 
                     int writeLatchReg = hart.pipelineRegisters[3].getRd();
                     int writeLatchValue = hart.pipelineRegisters[3].getResult();
@@ -119,10 +119,10 @@ public class ExecuteStage extends AbstractStage {
         if (!memoryInst.isEmpty()) {
             Opcode memoryOpcode = memoryInst.opcode();
             if (memoryOpcode == null) throw new RuntimeException("memoryOpcode is somehow null?");
-            boolean wasCSR = opcode == Opcode.SYSTEM && funct3 != 0;
+            boolean wasCSR = memoryOpcode == Opcode.SYSTEM && memoryInst.funct3() != 0;
             switch (memoryOpcode) {
-                case OP, OP_IMM, LUI, AUIPC, JAL, JALR -> {
-                    if (opcode == Opcode.SYSTEM && !wasCSR) return; // Filter for non-CSR SYSTEM instructions
+                case OP, OP_IMM, LUI, AUIPC, JAL, JALR, SYSTEM -> {
+                    if (memoryOpcode == Opcode.SYSTEM && !wasCSR) break; // Filter for non-CSR SYSTEM instructions
 
                     int memoryLatchReg = Byte.toUnsignedInt(hart.pipelineRegisters[2].getRd());
                     int memoryLatchValue = hart.pipelineRegisters[2].getResult();

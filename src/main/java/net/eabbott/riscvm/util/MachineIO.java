@@ -41,6 +41,7 @@ public class MachineIO {
         if (this.writer != null) {
             try {
                 this.writer.write(src);
+                this.writer.flush();
             } catch (IOException _) {}
         } else {
             IO.print(src);
