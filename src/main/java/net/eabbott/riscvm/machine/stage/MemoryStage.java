@@ -20,6 +20,10 @@ public class MemoryStage extends AbstractStage {
     private final PipelineRegister prevReg;
     private final PipelineRegister nextReg;
 
+    private int toWait = 0;
+    private boolean startedWaiting = false;
+    private int memoryResult = 0;
+
     public MemoryStage(Hart hart) {
         this.hart = hart;
         this.prevReg = hart.pipelineRegisters[2];
@@ -38,6 +42,12 @@ public class MemoryStage extends AbstractStage {
             this.needToNOP = true;
         }
 
+        if (toWait > 0) {
+            setStall();
+            --toWait;
+            return;
+        }
+
         logger.debug("Running rising edge for memory stage for hart #%d", hart.id);
 
         Instruction inst = new Instruction(prevReg.getInst());
@@ -53,6 +63,13 @@ public class MemoryStage extends AbstractStage {
         nextReg.setAMOOp(prevReg.getAMOOp());
         nextReg.setAMORl(prevReg.getAMORl());
         nextReg.setAMOAq(prevReg.getAMOAq());
+
+        if (startedWaiting && toWait == 0) {
+            nextReg.setResult(memoryResult);
+            startedWaiting = false;
+            memoryResult = 0;
+            return;
+        }
 
         Opcode opcode = inst.opcode();
         int memop = prevReg.getMemop() & 0xff;
@@ -71,11 +88,6 @@ public class MemoryStage extends AbstractStage {
             if (hart.status != HartStatus.RUNNING) return;
 
             MemoryResult result = hart.memman.read(address, size, AccessType.LOAD);
-            if (result.shouldWait()) {
-                logger.warning("Memory manager requested a stall for LOAD!");
-                setStall();
-                return;
-            }
             int value = BinaryUtil.intFromBytesLE(result.data(), 0, size);
 
             // if not LBU, sign extend
@@ -83,7 +95,17 @@ public class MemoryStage extends AbstractStage {
             // if not LHU, sign extend
             else if (size == 2 && funct3 != 0b101) value = BinaryUtil.sext(value, 15);
 
-            nextReg.setResult(value);
+            // If stall was requested, pocket the result
+            if (result.shouldWait() > 0) {
+                logger.warning("Memory manager requested %d stalls for LOAD at %d with result %d!", result.shouldWait(), address, value);
+                setStall();
+                toWait = result.shouldWait() - 1;
+                memoryResult = value;
+                startedWaiting = true;
+            } else {
+                // Otherwise, pass the result to the next pipeline register
+                nextReg.setResult(value);
+            }
 
         } else if (opcode == Opcode.STORE) {
             int size = switch (memop) {
@@ -102,9 +124,13 @@ public class MemoryStage extends AbstractStage {
                 Arrays.copyOfRange(BinaryUtil.bytesFromIntLE(prevReg.getStrval()), 0, size),
                 AccessType.STORE
             );
-            if (result.shouldWait()) {
-                logger.warning("Memory manager requested a stall for STORE of %d at %d!", prevReg.getStrval(), address);
+            if (result.shouldWait() > 0) {
+                logger.warning("Memory manager requested %d stalls for STORE of %d at %d!", prevReg.getStrval(), address);
                 setStall();
+                toWait = result.shouldWait() - 1;
+
+                // excluding prevents unnecessary passing of memoryResult to pipeline register
+                // startedWaiting = true;
             }
 
         } else if (opcode == Opcode.AMO) {
@@ -113,14 +139,24 @@ public class MemoryStage extends AbstractStage {
 
             if (operation == AMOOp.LR) {
                 AMOResult result = hart.memman.loadReserved(address);
-                if (result.shouldWait()) setStall();
+                if (result.shouldWait() > 0) {
+                    setStall();
+                    toWait = result.shouldWait() - 1;
+                    memoryResult = result.data();
+                    startedWaiting = true;
+                }
                 else nextReg.setResult(result.data());
                 return;
             }
 
             if (operation == AMOOp.SC) {
                 AMOResult result = hart.memman.storeConditional(address, operand);
-                if (result.shouldWait()) setStall();
+                if (result.shouldWait() > 0) {
+                    setStall();
+                    toWait = result.shouldWait() - 1;
+                    memoryResult = result.data();
+                    startedWaiting = true;
+                }
                 else nextReg.setResult(result.data());
                 return;
             }
@@ -141,7 +177,12 @@ public class MemoryStage extends AbstractStage {
                         "Unsupported AMO operation: " + operation
                 );
             });
-            if (result.shouldWait()) setStall();
+            if (result.shouldWait() > 0) {
+                setStall();
+                toWait = result.shouldWait() - 1;
+                memoryResult = result.data();
+                startedWaiting = true;
+            }
             else nextReg.setResult(result.data());
         }
     }

@@ -103,31 +103,34 @@ public final class MemoryManager {
     }
 
     public MemoryResult read(long address, int size, AccessType accessType) throws MemoryFault {
+        int toWait = 0;
+
         if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
             MMU.TranslateResult translated = this.mmu.translate(address, size, accessType);
-            if (translated.shouldWait()) return new MemoryResult(true, null);
-            else address = translated.address();
+            toWait += translated.shouldWait();
+            address = translated.address();
         }
 
         SortedSet<Integer> relevant = stripesForRange(address, size);
         acquireStripes(relevant);
-        MemoryResult output;
+        MemoryResult result;
         try {
-            output = top.read(address, size);
+            result = top.read(address, size);
         } finally {
             releaseStripes(relevant);
         }
-        return output;
+        toWait += result.shouldWait();
+
+        return new MemoryResult(toWait, result.data());
     }
 
     public MemoryResult write(long address, byte[] data, AccessType accessType) throws MemoryFault {
+        int toWait = 0;
+
         if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
             MMU.TranslateResult translated = this.mmu.translate(address, data.length, accessType);
-            if (translated.shouldWait()) {
-                VMLogger.getInstance().warning("Requesting wait for write vm translation");
-                return new MemoryResult(true, null);
-            }
-            else address = translated.address();
+            toWait += translated.shouldWait();
+            address = translated.address();
         }
 
         SortedSet<Integer> relevant = stripesForRange(address, data.length);
@@ -135,20 +138,24 @@ public final class MemoryManager {
         MemoryResult output;
         try {
             output = top.write(address, data);
-            if (!output.shouldWait()) invalidateReservations(address, data.length);
+            invalidateReservations(address, data.length);
         } finally {
             releaseStripes(relevant);
         }
-        return output;
+        toWait += output.shouldWait();
+
+        return new MemoryResult(toWait, output.data());
     }
 
     // Atomic-relevant code below:
 
     public AMOResult rmw(long address, IntUnaryOperator func) throws MemoryFault {
+        int toWait = 0;
+
         if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
             MMU.TranslateResult translated = this.mmu.translate(address, 4, AccessType.AMO);
-            if (translated.shouldWait()) return new AMOResult(true, 0);
-            else address = translated.address();
+            toWait += translated.shouldWait();
+            address = translated.address();
         }
         checkWordAlignment(address);
 
@@ -157,30 +164,28 @@ public final class MemoryManager {
 
         try {
             MemoryResult result = top.read(address, 4);
-            if (result.shouldWait()) {
-                return new AMOResult(true, 0);
-            }
+            toWait += result.shouldWait();
 
             int oldValue = BinaryUtil.intFromBytesLE(result.data(), 0, 4);
             int newValue = func.applyAsInt(oldValue);
 
             result = top.write(address, BinaryUtil.bytesFromIntLE(newValue));
-            if (result.shouldWait()) {
-                return new AMOResult(true, 0);
-            }
+            toWait += result.shouldWait();
             invalidateReservations(address, 4);
 
-            return new AMOResult(false, oldValue);
+            return new AMOResult(toWait, oldValue);
         } finally {
             releaseStripes(relevant);
         }
     }
 
     public AMOResult loadReserved(long address) throws MemoryFault {
+        int toWait = 0;
+
         if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
             MMU.TranslateResult translated = this.mmu.translate(address, 4, AccessType.AMO);
-            if (translated.shouldWait()) return new AMOResult(true, 0);
-            else address = translated.address();
+            toWait += translated.shouldWait();
+            address = translated.address();
         }
         checkWordAlignment(address);
 
@@ -189,24 +194,24 @@ public final class MemoryManager {
 
         try {
             MemoryResult result = top.read(address, 4);
-            if (result.shouldWait()) {
-                return new AMOResult(true, 0);
-            }
+            toWait += result.shouldWait();
 
             int value = BinaryUtil.intFromBytesLE(result.data(), 0, 4);
             RESERVATIONS.put(hart.id, address);
 
-            return new AMOResult(false, value);
+            return new AMOResult(toWait, value);
         } finally {
             releaseStripes(relevant);
         }
     }
 
     public AMOResult storeConditional(long address, int value) throws MemoryFault {
+        int toWait = 0;
+
         if (this.hart.csrFile.read(CSRFile.SATP) != 0) {
             MMU.TranslateResult translated = this.mmu.translate(address, 4, AccessType.AMO);
-            if (translated.shouldWait()) return new AMOResult(true, 0);
-            else address = translated.address();
+            toWait += translated.shouldWait();
+            address = translated.address();
         }
         checkWordAlignment(address);
 
@@ -217,19 +222,17 @@ public final class MemoryManager {
             Long reservation = RESERVATIONS.get(hart.id);
             if (reservation == null || reservation != address) {
                 RESERVATIONS.remove(hart.id);
-                return new AMOResult(false, 1);
+                return new AMOResult(toWait, 1);
             }
 
             // Attempt store, abort if stall requested
             MemoryResult result = top.write(address, BinaryUtil.bytesFromIntLE(value));
-            if (result.shouldWait()) {
-                return new AMOResult(true, 0);
-            }
+            toWait += result.shouldWait();
 
             // Only remove reservation(s) after successfully performing store
             invalidateReservations(address, 4);
 
-            return new AMOResult(false, 0);
+            return new AMOResult(toWait, 0);
 
         } finally {
             releaseStripes(relevant);

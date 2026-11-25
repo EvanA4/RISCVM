@@ -55,24 +55,26 @@ public class RAM implements BackingStore {
     * Writes src.length bytes at address in RAM, so long as it is not being used.
     * */
     public MemoryResult write(long address, byte[] src) {
-        if (LOCK.tryLock()) {
+        LOCK.lock();
+        try {
             MemorySegment asSegment = MemorySegment.ofArray(src);
             segment.asSlice(address, src.length).copyFrom(asSegment);
+            return new MemoryResult(LOCK.getQueueLength(), null);
+        } finally {
             LOCK.unlock();
-            return new MemoryResult(false, null);
         }
-        return new MemoryResult(true, null);
     }
 
     /**
      * Reads size bytes at address, so long as RAM is not being used.
      */
     public MemoryResult read(long address, int size) {
-        if (LOCK.tryLock()) {
+        LOCK.lock();
+        try {
             byte[] data = segment.asSlice(address, size).toArray(java.lang.foreign.ValueLayout.JAVA_BYTE);
+            return new MemoryResult(LOCK.getQueueLength(), data);
+        } finally {
             LOCK.unlock();
-            return new MemoryResult(false, data);
         }
-        return new MemoryResult(true, null);
     }
 }

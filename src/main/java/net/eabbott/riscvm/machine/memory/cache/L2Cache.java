@@ -15,10 +15,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * The L2 cache for a hart.
  * */
 public final class L2Cache implements BackingStore {
-    private record InstallationResult(boolean shouldWait, MESILine data) {}
+    private record InstallationResult(int shouldWait, MESILine data) {}
 
-    // The snoopy bus lock and list of all L1 caches
     private final VMLogger logger = VMLogger.getInstance();
+
+    // The snoopy bus lock and list of all L2 caches
     private static final Object BUS_LOCK = new Object();
     private static final Map<Integer, L2Cache> CACHES = new ConcurrentHashMap<>();
 
@@ -76,6 +77,7 @@ public final class L2Cache implements BackingStore {
 
     @Override
     public MemoryResult read(long address, int size) {
+        int toWait = 0;
         byte[] output = new byte[size];
 
         // Awkward loop tracks reads spanning multiple blocks
@@ -87,23 +89,25 @@ public final class L2Cache implements BackingStore {
             int count = Math.min(size - copied, blockSize - offset);
 
             MemoryResult result = readBlockRange(block, offset, count);
-            if (result.shouldWait()) return new MemoryResult(true, null);
+            toWait += result.shouldWait();
 
             System.arraycopy(result.data(), 0, output, copied, count);
             copied += count;
         }
 
-        return new MemoryResult(false, output);
+        return new MemoryResult(toWait, output);
     }
 
     private MemoryResult readBlockRange(long block, int offset, int count) {
+        int toWait = 0;
+
         // Best-case scenario: local read is possible
         synchronized (localLock) {
             MESILine line = lines.read(block);
             if (isValid(line)) {
                 line.touch(++clock);
                 byte[] range = Arrays.copyOfRange(line.data, offset, offset + count);
-                return new MemoryResult(false, range);
+                return new MemoryResult(0, range);
             }
         }
 
@@ -115,13 +119,13 @@ public final class L2Cache implements BackingStore {
                 if (isValid(line)) {
                     line.touch(++clock);
                     byte[] range = Arrays.copyOfRange(line.data, offset, offset + count);
-                    return new MemoryResult(false, range);
+                    return new MemoryResult(0, range);
                 }
             }
 
             // MESI operation is still needed :(
             MemoryResult result = findPeerData(block);
-            if (result.shouldWait()) return new MemoryResult(true, null);
+            toWait += result.shouldWait();
             byte[] data = result.data();
             boolean hadValidPeer = data != null;
 
@@ -129,13 +133,15 @@ public final class L2Cache implements BackingStore {
                 // If block was not found among peers, access backing store
                 if (data == null) {
                     result = backingStore.read(block, blockSize);
-                    if (result.shouldWait()) return new MemoryResult(true, null);
+                    toWait += 1 + result.shouldWait();
                     data = result.data();
                 }
 
                 // Add/update line in cache and request stall
-                installLine(block, data, hadValidPeer ? MESI.SHARED : MESI.EXCLUSIVE);
-                return new MemoryResult(true, null);
+                InstallationResult instResult = installLine(block, data, hadValidPeer ? MESI.SHARED : MESI.EXCLUSIVE);
+                toWait += instResult.shouldWait();
+                byte[] range = Arrays.copyOfRange(data, offset, offset + count);
+                return new MemoryResult(toWait, range);
             }
         }
     }
@@ -143,6 +149,7 @@ public final class L2Cache implements BackingStore {
     @Override
     public MemoryResult write(long address, byte[] data) {
         Objects.requireNonNull(data, "data");
+        int toWait = 0;
 
         // Awkward loop tracks writes spanning multiple blocks
         int copied = 0;
@@ -153,29 +160,40 @@ public final class L2Cache implements BackingStore {
             int count = Math.min(data.length - copied, blockSize - offset);
 
             MemoryResult result = writeBlockRange(block, offset, data, copied, count);
-            if (result.shouldWait()) return new MemoryResult(true, null);
+            toWait += result.shouldWait();
 
             copied += count;
         }
 
-        return new MemoryResult(false, null);
+        return new MemoryResult(toWait, null);
     }
 
     private MemoryResult writeBlockRange(
             long block, int offset, byte[] source, int sourceOffset, int count) {
+        logger.warning("[%d] L2 CACHE: writeBlockRange block %d, offset %d, %d-byte source, src-offset %d, count %d",
+                hartId, block, offset, source.length, sourceOffset, count);
+
+        int toWait = 0;
 
         // Best-case scenario: local write is possible
         synchronized (localLock) {
             MESILine line = lines.read(block);
+
+            if (line == null) logger.warning("[%d] L2 CACHE: Fetched null from L2 cache for block %d", hartId, block);
+            else {
+                logger.warning("[%d] L2 CACHE: Fetched line of block %d and state %s using block %d", hartId, line.blockAddress, line.state.name(), block);
+            }
+
             if (isValid(line)
                     && (line.state == MESI.MODIFIED
                     || line.state == MESI.EXCLUSIVE)) {
                 // Try a write-through, abort if stall requested
                 if (!writeBack) {
+                    logger.warning("[%d] L2 CACHE: no writeBack, updating backing store", hartId);
                     byte[] newBlock = line.data.clone();
                     System.arraycopy(source, sourceOffset, newBlock, offset, count);
                     MemoryResult result = backingStore.write(block, newBlock);
-                    if (result.shouldWait()) return new MemoryResult(true, null);
+                    toWait += result.shouldWait();
                     line.state = MESI.EXCLUSIVE;
                 }
 
@@ -186,9 +204,10 @@ public final class L2Cache implements BackingStore {
                     line.state = MESI.MODIFIED;
                 }
 
-                return new MemoryResult(false, null);
+                return new MemoryResult(toWait, null);
             }
         }
+        logger.warning("[%d] L2 CACHE: Local write not possible", hartId);
 
         // Painful scenario: local write is not possible, MESI operation needed
         synchronized (this.getCoherencyLock(block)) {
@@ -201,10 +220,11 @@ public final class L2Cache implements BackingStore {
                 {
                     // Try a write-through, abort if stall requested
                     if (!writeBack) {
+                        logger.warning("[%d] L2 CACHE: no writeBack, updating backing store", hartId);
                         byte[] newBlock = line.data.clone();
                         System.arraycopy(source, sourceOffset, newBlock, offset, count);
                         MemoryResult result = backingStore.write(block, newBlock);
-                        if (result.shouldWait()) return new MemoryResult(true, null);
+                        toWait += result.shouldWait();
                         line.state = MESI.EXCLUSIVE;
                     }
 
@@ -215,9 +235,10 @@ public final class L2Cache implements BackingStore {
                         line.state = MESI.MODIFIED;
                     }
 
-                    return new MemoryResult(false, null);
+                    return new MemoryResult(toWait, null);
                 }
             }
+            logger.warning("[%d] L2 CACHE: Local write STILL not possible", hartId);
 
             // MESI operation is still needed :(
             byte[] data;
@@ -230,15 +251,18 @@ public final class L2Cache implements BackingStore {
 
             // If line not in cache, look for line across peers
             if (data == null) {
+                logger.warning("[%d] L2 CACHE: Attempting to fetch line from peers", hartId);
                 MemoryResult result = findPeerData(block);
-                if (result.shouldWait()) return new MemoryResult(true, null);
+                toWait += 1 + result.shouldWait();
                 data = result.data();
             }
+            logger.warning("[%d] L2 CACHE: Finished peer fetch check.", hartId);
 
-            // If no peer has the line, access backing store
+            // If no peer has the line AND IT IS NOT SHARED, access backing store
             if (data == null) {
+                logger.warning("[%d] L2 CACHE: Peer fetch attempt yielded nothing, reading from backing store...", hartId);
                 MemoryResult result = backingStore.read(block, blockSize);
-                if (result.shouldWait()) return new MemoryResult(true, null);
+                toWait += 1 + result.shouldWait();
                 data = result.data();
             }
 
@@ -248,9 +272,11 @@ public final class L2Cache implements BackingStore {
 
             // Finally, read to local cache and request stall
             synchronized (localLock) {
+                logger.warning("[%d] L2 CACHE: Finally installing line.", hartId);
                 InstallationResult result = installLine(block, data, MESI.EXCLUSIVE);
-                if (!result.shouldWait()) registerDirectoryLine(block, result.data());
-                return new MemoryResult(true, null);
+                toWait += result.shouldWait();
+                registerDirectoryLine(block, result.data());
+                return new MemoryResult(toWait, null);
             }
         }
     }
@@ -260,8 +286,10 @@ public final class L2Cache implements BackingStore {
      */
     private MemoryResult findPeerData(long block) {
         if (coherency == CacheCoherency.NONE) {
-            return new MemoryResult(false, null);
+            return new MemoryResult(0, null);
         }
+
+        int toWait = 0;
 
         for (L2Cache peer : peerCaches(block)) {
             synchronized (peer.localLock) {
@@ -274,17 +302,17 @@ public final class L2Cache implements BackingStore {
                 if (peerLine.state == MESI.MODIFIED) {
                     // If peer's line is dirty, try to write back and abort peer search if stall requested
                     MemoryResult result = peer.backingStore.write(block, peerLine.data);
-                    if (result.shouldWait()) return new MemoryResult(true, null);
+                    toWait += result.shouldWait();
 
                     peerLine.state = MESI.SHARED;
                 } else if (peerLine.state == MESI.EXCLUSIVE) {
                     peerLine.state = MESI.SHARED;
                 }
-                return new MemoryResult(false, data);
+                return new MemoryResult(toWait, data);
             }
         }
 
-        return new MemoryResult(false, null);
+        return new MemoryResult(toWait, null);
     }
 
     /**
@@ -335,11 +363,16 @@ public final class L2Cache implements BackingStore {
      * Adds a line to the local cache. Should only be called with local lock held.
      */
     private InstallationResult installLine(long block, byte[] data, MESI state) {
+        logger.debug("[%d] L2 CACHE: installLine block %d, %d bytes, %s", hartId, block, data.length, state.name());
+
+        int toWait = 0;
+
         MESILine victim = this.lines.findVictim(block);
         if (victim != null && victim.state == MESI.MODIFIED) {
+            logger.debug("[%d] L2 CACHE: Found MODIFIED victim of block %d using block %d", hartId, victim.blockAddress, block);
             // Attempt to write the dirty victim to backing store, abort installation if stall requested
             MemoryResult result = backingStore.write(victim.blockAddress, victim.data);
-            if (result.shouldWait()) return new InstallationResult(true, null);
+            toWait += result.shouldWait();
 
             // If write back worked, remove from local cache
             unregisterDirectoryLine(victim.blockAddress);
@@ -350,7 +383,7 @@ public final class L2Cache implements BackingStore {
         lines.write(line);
         line.touch(++clock);
         registerDirectoryLine(block, line);
-        return new InstallationResult(false, line);
+        return new InstallationResult(toWait, line);
     }
 
     /**

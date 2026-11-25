@@ -24,6 +24,9 @@ public class FetchStage extends AbstractStage {
     boolean hartWasParked = false;
     public int overwritePC = -1;
 
+    private int toWait = 0;
+    private byte[] fetchResult = null;
+
     public FetchStage(Hart hart) {
         this.hart = hart;
         this.nextReg = this.hart.pipelineRegisters[0];
@@ -42,9 +45,7 @@ public class FetchStage extends AbstractStage {
         // logger.debug("No instructions in pipeline! Continuing...");
 
         this.hartWasParked = this.hart.status != HartStatus.RUNNING;
-        if (this.hartWasParked) {
-            this.needToNOP = true;
-        }
+        if (this.hartWasParked || toWait > 0) this.needToNOP = true;
 
         logger.debug("Running rising edge for fetch stage for hart #%d", this.hart.id);
 
@@ -63,30 +64,41 @@ public class FetchStage extends AbstractStage {
         // Load raw instruction into new instruction register
         byte[] rawInstruction;
         MemoryResult result = null;
-        if (hart.status == HartStatus.RUNNING) {
-            try {
-                result = this.hart.memman.read(currentPC, 4, AccessType.FETCH);
-            } catch (MemoryFault e) {
-                VirtualMachine.getInstance().parkHart(hart.id, HartStatus.FETCH_FAULT);
+        if (hart.status == HartStatus.RUNNING && toWait == 0) {
+            if (fetchResult != null) {
+                result = new MemoryResult(0, fetchResult);
+                fetchResult = null;
+            } else {
+                try {
+                    result = this.hart.memman.read(currentPC, 4, AccessType.FETCH);
+                } catch (MemoryFault e) {
+                    VirtualMachine.getInstance().parkHart(hart.id, HartStatus.FETCH_FAULT);
+                }
             }
         }
+        if (toWait > 0) --toWait;
 
         // If failed to fetch, stall
-        if (
-            result == null
-                || result.shouldWait()
-                || (result.data() != null && BinaryUtil.intFromBytesLE(result.data(), 0, 4) == 0)
-        ) {
+        if (result == null
+                || result.data() == null
+                || BinaryUtil.intFromBytesLE(result.data(), 0, 4) == 0) {
             logger.verbose("Failed to fetch instruction!");
             needToNOP = true;
             hart.programCounter = previousCounter;
-            return;
-        }
-        rawInstruction = result.data();
 
-        byte[] flipped = ByteBuffer.wrap(rawInstruction).flip().array();
-        this.nextReg.setInst(flipped);
-        this.nextReg.setPC(currentPC);
+        } else if (result.shouldWait() > 0) {
+            logger.warning("Failed to fetch instruction, stalling %d cycles!", result.shouldWait());
+            toWait = result.shouldWait() - 1;
+            fetchResult = result.data();
+            needToNOP = true;
+            hart.programCounter = previousCounter;
+
+        } else {
+            rawInstruction = result.data();
+            byte[] flipped = ByteBuffer.wrap(rawInstruction).flip().array();
+            this.nextReg.setInst(flipped);
+            this.nextReg.setPC(currentPC);
+        }
     }
 
     public void falling() {
@@ -98,7 +110,12 @@ public class FetchStage extends AbstractStage {
         if (!this.hartWasParked) this.hart.csrFile.incrementCycle();
         if (!this.needToNOP && !this.needToFreeze) this.hart.csrFile.incrementInstret();
 
-        if (this.overwritePC != -1) this.hart.programCounter = overwritePC;
+        // If EXECUTE stage overwrites PC, cancel stall
+        if (this.overwritePC != -1) {
+            this.hart.programCounter = overwritePC;
+            toWait = 0;
+            fetchResult = null;
+        }
 
         if (this.needToNOP) {
             this.hart.pipelineRegisters[0].setNextToNop();

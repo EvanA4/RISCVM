@@ -63,6 +63,7 @@ public class MESICacheData {
                 int index = Math.floorMod(
                         Math.floorDiv(block, this.blockSize), this.daLines.size());
                 if (daLines.get(index) == null) {
+                    VMLogger.getInstance().debug("Fetched null for block %d at index %d for DM", block, index);
                     yield false;
                 }
                 else {
@@ -73,6 +74,7 @@ public class MESICacheData {
                 int index = Math.floorMod(
                         Math.floorDiv(block, this.blockSize), this.saLines.size());
                 Map<Long, MESILine> map = saLines.get(index);
+                VMLogger.getInstance().debug("Fetched %s for block %d at index %d for SA", Boolean.toString(map.containsKey(block)), block, index);
                 yield map.containsKey(block);
             }
             case FULL_ASSOC -> this.faLines.containsKey(block);

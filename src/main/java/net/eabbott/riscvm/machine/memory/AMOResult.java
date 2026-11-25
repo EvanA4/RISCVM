@@ -1,3 +1,3 @@
 package net.eabbott.riscvm.machine.memory;
 
-public record AMOResult(boolean shouldWait, int data) {}
+public record AMOResult(int shouldWait, int data) {}

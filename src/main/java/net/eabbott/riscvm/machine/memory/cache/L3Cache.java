@@ -12,6 +12,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * A block-based cache shared by all harts. It has no cache-coherence protocol.
  */
 public final class L3Cache implements BackingStore {
+    private record FetchResult(int shouldWait, SimpleLine data){}
     private static final ReentrantLock LOCK = new ReentrantLock();
     
     private final int blockSize;
@@ -37,36 +38,38 @@ public final class L3Cache implements BackingStore {
 
     @Override
     public MemoryResult read(long address, int size) {
-        if (LOCK.tryLock()) {
+        LOCK.lock();
+        try {
             byte[] output = new byte[size];
-    
+            int toWait = LOCK.getQueueLength();
+
             int copied = 0;
             while (copied < size) {
                 long currentAddress = address + copied;
                 long blockAddress = blockAddress(currentAddress);
                 int offset = (int) (currentAddress - blockAddress);
                 int count = Math.min(size - copied, blockSize - offset);
-    
+
                 MemoryResult result = readBlockRange(blockAddress, offset, count);
-                if (result.shouldWait()) {
-                    LOCK.unlock();
-                    return new MemoryResult(true, null);
-                }
+                toWait += result.shouldWait();
 
                 System.arraycopy(result.data(), 0, output, copied, count);
                 copied += count;
             }
 
+            return new MemoryResult(toWait, output);
+        } finally {
             LOCK.unlock();
-            return new MemoryResult(false, output);
         }
-        return new MemoryResult(true, null);
     }
 
     @Override
     public synchronized MemoryResult write(long address, byte[] data) {
-        if (LOCK.tryLock()) {
-            Objects.requireNonNull(data, "data");
+        Objects.requireNonNull(data, "data");
+
+        LOCK.lock();
+        try {
+            int toWait = LOCK.getQueueLength();
 
             int copied = 0;
             while (copied < data.length) {
@@ -76,63 +79,71 @@ public final class L3Cache implements BackingStore {
                 int count = Math.min(data.length - copied, blockSize - offset);
 
                 MemoryResult result = writeBlockRange(blockAddress, offset, data, copied, count);
-                if (result.shouldWait()) {
-                    LOCK.unlock();
-                    return new MemoryResult(true, null);
-                }
+                toWait += result.shouldWait();
 
                 copied += count;
             }
+
+            return new MemoryResult(toWait, null);
+
+        } finally {
             LOCK.unlock();
-            return new MemoryResult(false, null);
         }
-        return new MemoryResult(true, null);
     }
 
     private MemoryResult readBlockRange(long blockAddress, int offset, int count) {
+        int toWait = 0;
+
         // Attempt to read locally
         SimpleLine line = lines.read(blockAddress);
-        if (line != null) {
-            line.touch(++clock);
-            byte[] range = Arrays.copyOfRange(line.data, offset, offset + count);
-            return new MemoryResult(false, range);
+
+        // Can't read locally, read from backing store :(
+        if (line == null) {
+            FetchResult result = fetchBackingStore(blockAddress);
+            toWait += 1 + result.shouldWait();
+            line = result.data();
         }
 
-        // Can't write locally, read from backing store :(
-        fetchBackingStore(blockAddress);
-        return new MemoryResult(true, null);
+        // Actually read locally
+        line.touch(++clock);
+        byte[] range = Arrays.copyOfRange(line.data, offset, offset + count);
+        return new MemoryResult(toWait, range);
     }
 
     private MemoryResult writeBlockRange(long blockAddress, int offset, byte[] source, int sourceOffset, int count) {
+        int toWait = 0;
+
         // Attempt to write locally
         SimpleLine line = lines.read(blockAddress);
-        if (line != null) {
-            line.touch(++clock);
 
-            // Attempt write-through before writing to local cache, abort if process fails
-            if (!writeBack) {
-                byte[] newBlock = line.data.clone();
-                System.arraycopy(source, sourceOffset, newBlock, offset, count);
-                MemoryResult result = backingStore.write(line.blockAddress, newBlock);
-                if (result.shouldWait()) return new MemoryResult(true, null);
-            }
-
-            System.arraycopy(source, sourceOffset, line.data, offset, count);
-            return new MemoryResult(false, null);
+        // Cannot write locally, read value and add to stall counter
+        if (line == null) {
+            FetchResult result = fetchBackingStore(blockAddress);
+            toWait = 1 + result.shouldWait();
+            line = result.data();
         }
 
-        // Can't write locally, read from backing store :(
-        fetchBackingStore(blockAddress);
-        return new MemoryResult(true, null);
+        // Attempt write-through before writing to local cache, abort if process fails
+        if (!writeBack) {
+            byte[] newBlock = line.data.clone();
+            System.arraycopy(source, sourceOffset, newBlock, offset, count);
+            MemoryResult result = backingStore.write(line.blockAddress, newBlock);
+            toWait += result.shouldWait();
+        }
+
+        System.arraycopy(source, sourceOffset, line.data, offset, count);
+        return new MemoryResult(toWait, null);
     }
 
-    private void fetchBackingStore(long blockAddress) {
+    private FetchResult fetchBackingStore(long blockAddress) {
+        int toWait = 0;
+
         // Evict if necessary
         SimpleLine victim = this.lines.findVictim(blockAddress);
         if (victim != null && victim.dirty) {
             // Try to write the dirty victim to backing store, abort process if stall requested
             MemoryResult result = backingStore.write(victim.blockAddress, victim.data);
-            if (result.shouldWait()) return;
+            toWait += result.shouldWait();
 
             // If no stall requested, remove now-clean victim from cache
             this.lines.evictBlock(victim.blockAddress);
@@ -140,11 +151,13 @@ public final class L3Cache implements BackingStore {
 
         // Then read from backing store
         MemoryResult result = backingStore.read(blockAddress, blockSize);
-        if (result.shouldWait()) return;
+        toWait += result.shouldWait();
 
         // Finally, update local cache and request stall
         SimpleLine line = new SimpleLine(blockAddress, result.data(), ++clock);
         lines.write(line);
+
+        return new FetchResult(toWait, line);
     }
 
     private long blockAddress(long address) {

@@ -1,3 +1,3 @@
 package net.eabbott.riscvm.machine.memory.cache;
 
-public record MemoryResult(boolean shouldWait, byte[] data) {}
+public record MemoryResult(int shouldWait, byte[] data) {}
