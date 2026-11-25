@@ -103,9 +103,9 @@ public class VirtualMachine {
                         current.a0() >= harts.length ||
                         harts[current.a0()].status == HartStatus.RUNNING
                     ) {
-                        callResults[current.hartId()] = -1;
-                    } else {
                         callResults[current.hartId()] = 0;
+                    } else {
+                        callResults[current.hartId()] = 1;
                         unparkHart(current.a0(), current.a1(), current.a2(), current.a3());
                     }
                 }
