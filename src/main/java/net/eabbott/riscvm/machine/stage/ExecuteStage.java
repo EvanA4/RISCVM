@@ -31,6 +31,7 @@ public class ExecuteStage extends AbstractStage {
         int oldValue;
         try {
             oldValue = hart.csrFile.read(csr);
+            logger.warning("[%d] Read value %d from CSR %x", hart.id, oldValue, csr);
 
             int newValue = switch (funct3) {
                 case 0b001, 0b101 -> source;                 // CSRRW, CSRRWI
@@ -98,8 +99,11 @@ public class ExecuteStage extends AbstractStage {
         if (!writeInst.isEmpty()) {
             Opcode writeOpcode = writeInst.opcode();
             if (writeOpcode == null) throw new RuntimeException("writeOpcode is somehow null?");
+            boolean wasCSR = opcode == Opcode.SYSTEM && funct3 != 0;
             switch (writeOpcode) {
-                case OP, OP_IMM, LUI, AUIPC, JAL, JALR, AMO, LOAD -> {
+                case OP, OP_IMM, LUI, AUIPC, JAL, JALR, AMO, LOAD, SYSTEM -> {
+                    if (opcode == Opcode.SYSTEM && !wasCSR) return; // Filter for non-CSR SYSTEM instructions
+
                     int writeLatchReg = hart.pipelineRegisters[3].getRd();
                     int writeLatchValue = hart.pipelineRegisters[3].getResult();
                     if (writeLatchReg != 0) {
@@ -115,8 +119,11 @@ public class ExecuteStage extends AbstractStage {
         if (!memoryInst.isEmpty()) {
             Opcode memoryOpcode = memoryInst.opcode();
             if (memoryOpcode == null) throw new RuntimeException("memoryOpcode is somehow null?");
+            boolean wasCSR = opcode == Opcode.SYSTEM && funct3 != 0;
             switch (memoryOpcode) {
                 case OP, OP_IMM, LUI, AUIPC, JAL, JALR -> {
+                    if (opcode == Opcode.SYSTEM && !wasCSR) return; // Filter for non-CSR SYSTEM instructions
+
                     int memoryLatchReg = Byte.toUnsignedInt(hart.pipelineRegisters[2].getRd());
                     int memoryLatchValue = hart.pipelineRegisters[2].getResult();
                     if (memoryLatchReg != 0) {
@@ -129,7 +136,7 @@ public class ExecuteStage extends AbstractStage {
         }
 
         ALUOp op = ALUOp.fromByte(prevReg.getAluop());
-        boolean isCSR =  opcode == Opcode.SYSTEM && funct3 != 0;
+        boolean isCSR = opcode == Opcode.SYSTEM && funct3 != 0;
         int result = isCSR ? executeCSR(instruction, left) : alu.execute(op, left, right);
         int actualNextPc = pc + 4;
 

@@ -72,7 +72,7 @@ public class DecodeStage extends AbstractStage {
         // Case-by-case processing
         switch (opcode) {
             case LOAD -> {
-                logger.info("Processing type I at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
+                logger.info("[%d] Processing type I at PC %d %x: %s", hart.id, prevReg.getPC(), prevReg.getPC(), opcode);
 
                 int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
@@ -93,7 +93,7 @@ public class DecodeStage extends AbstractStage {
                 }
             }
             case SYSTEM -> {
-                logger.info("Processing type I at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
+                logger.info("[%d] Processing type I at PC %d %x: %s", hart.id, prevReg.getPC(), prevReg.getPC(), opcode);
 
                 int imm = instruction.imm();
 
@@ -134,7 +134,7 @@ public class DecodeStage extends AbstractStage {
                 }
             }
             case JALR -> {
-                logger.info("Processing type I at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
+                logger.info("[%d] Processing type I at PC %d %x: %s", hart.id, prevReg.getPC(), prevReg.getPC(), opcode);
                 if (funct3 != 0) {
                     onIllegalInstruction();
                     return;
@@ -148,8 +148,8 @@ public class DecodeStage extends AbstractStage {
                 this.nextReg.setALUOp(ALUOp.Add.toByte());
             }
             case OP_IMM -> {
-                logger.info("Processing type I at PC %d %x: %s %s",
-                        prevReg.getPC(), prevReg.getPC(), opcode, instruction.isNOP() ? "[NOP]" : "");
+                logger.info("[%d] Processing type I at PC %d %x: %s %s",
+                        hart.id, prevReg.getPC(), prevReg.getPC(), opcode, instruction.isNOP() ? "[NOP]" : "");
                 int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
@@ -164,7 +164,7 @@ public class DecodeStage extends AbstractStage {
                 this.nextReg.setALUOp(parsed.toByte());
             }
             case STORE -> {
-                logger.info("Processing type S at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
+                logger.info("[%d] Processing type S at PC %d %x: %s", hart.id, prevReg.getPC(), prevReg.getPC(), opcode);
                 int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(imm);
@@ -181,7 +181,7 @@ public class DecodeStage extends AbstractStage {
                 }
             }
             case BRANCH -> {
-                logger.info("Processing type B at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
+                logger.info("[%d] Processing type B at PC %d %x: %s", hart.id, prevReg.getPC(), prevReg.getPC(), opcode);
                 int imm = instruction.imm();
                 this.nextReg.setLeft(this.hart.registers.read(rs1));
                 this.nextReg.setRight(this.hart.registers.read(rs2));
@@ -189,14 +189,14 @@ public class DecodeStage extends AbstractStage {
                 this.nextReg.setALUOp(ALUOp.Sub.toByte());
             }
             case JAL -> {
-                logger.info("Processing type J at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
+                logger.info("[%d] Processing type J at PC %d %x: %s", hart.id, prevReg.getPC(), prevReg.getPC(), opcode);
                 int imm = instruction.imm();
                 this.nextReg.setDisp(imm);
                 this.nextReg.setALUOp(ALUOp.None.toByte());
                 this.nextReg.setRd((byte) rd);
             }
             case OP -> {
-                logger.info("Processing type R at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
+                logger.info("[%d] Processing type R at PC %d %x: %s", hart.id, prevReg.getPC(), prevReg.getPC(), opcode);
                 ALUOp op = instruction.aluOp();
                 if (op == ALUOp.None || (ALUOp.isM(op) && !this.allowM)) {
                     onIllegalInstruction();
@@ -208,7 +208,7 @@ public class DecodeStage extends AbstractStage {
                 this.nextReg.setRd((byte) rd);
             }
             case AUIPC, LUI -> {
-                logger.info("Processing type U at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
+                logger.info("[%d] Processing type U at PC %d %x: %s", hart.id, prevReg.getPC(), prevReg.getPC(), opcode);
                 int imm = instruction.imm();
                 this.nextReg.setLeft(opcode == Opcode.AUIPC ? prevReg.getPC() : 0);
                 this.nextReg.setRight(imm);
@@ -216,7 +216,7 @@ public class DecodeStage extends AbstractStage {
                 this.nextReg.setRd((byte) rd);
             }
             case AMO -> {
-                logger.info("Processing type A at PC %d %x: %s", prevReg.getPC(), prevReg.getPC(), opcode);
+                logger.info("[%d] Processing type A at PC %d %x: %s", hart.id, prevReg.getPC(), prevReg.getPC(), opcode);
                 if (!this.allowA) {
                     onIllegalInstruction();
                     return;
