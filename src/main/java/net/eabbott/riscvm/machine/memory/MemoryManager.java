@@ -31,6 +31,7 @@ public final class MemoryManager {
     private static final int STRIPE_SHIFT = 2;
     private static final int STRIPE_COUNT = 256;
     private static final ReentrantLock[] STRIPES = new ReentrantLock[STRIPE_COUNT];
+    private final VMLogger logger = VMLogger.getInstance();
 
     // Populate stripe lock array
     static {
@@ -231,7 +232,6 @@ public final class MemoryManager {
 
             // Only remove reservation(s) after successfully performing store
             invalidateReservations(address, 4);
-
             return new AMOResult(toWait, 0);
 
         } finally {

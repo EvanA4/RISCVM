@@ -248,7 +248,7 @@ public class DecodeStage extends AbstractStage {
         boolean hasLoadUseHazard = false;
         Instruction execInst = new Instruction(this.hart.pipelineRegisters[1].getInst());
         int execRd = execInst.rd();
-        if (execInst.opcode() == Opcode.LOAD && execRd != 0) {
+        if (execInst.opcode() == Opcode.LOAD || execInst.opcode() == Opcode.AMO && execRd != 0) {
             hasLoadUseHazard = execRd == left
                 || execRd == right
                 || execRd == strval;
