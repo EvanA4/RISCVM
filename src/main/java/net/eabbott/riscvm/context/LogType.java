@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.context;
 
+/**
+ * An enum representing the different levels of logging for messages.
+ */
 public enum LogType {
     VERBOSE,
     DEBUG,

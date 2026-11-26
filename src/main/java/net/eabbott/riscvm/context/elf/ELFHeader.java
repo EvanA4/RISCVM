@@ -5,6 +5,9 @@ import net.eabbott.riscvm.util.BinaryUtil;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 
+/**
+ * An unholy mass of configurations representing an ELF header.
+ */
 public class ELFHeader {
     public int ident;
     public int bitsize;
@@ -27,13 +30,13 @@ public class ELFHeader {
     public int shnum;
     public int shstrndx;
 
+    // Reads the ELF header given the file reader object
     public static ELFHeader read(RandomAccessFile reader) throws IOException {
         ELFHeader header = new ELFHeader();
         byte[] rawHeader = new byte[52];
         reader.read(rawHeader);
 
-//        for (int i = 0; i < rawHeader.length; ++i) VMLogger.getInstance().log("[%d] %x", i, rawHeader[i]);
-
+        // An ocean of reading integers from bytes in little-endian order
         header.ident = BinaryUtil.intFromBytesLE(rawHeader, 0, 4);
         header.bitsize = BinaryUtil.intFromBytesLE(rawHeader, 4, 1);
         header.endian = BinaryUtil.intFromBytesLE(rawHeader, 5, 1);

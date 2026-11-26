@@ -70,11 +70,12 @@ public final class L2Cache implements BackingStore {
         }
     }
 
+    // A shallow invalidation which ignores dirty entries
     public void invalidateAll() {
-        // Shallow invalidation ignores dirty entries
         lines.invalidateAll();
     }
 
+    // Reads from memory
     @Override
     public MemoryResult read(long address, int size) {
         int toWait = 0;
@@ -98,6 +99,7 @@ public final class L2Cache implements BackingStore {
         return new MemoryResult(toWait, output);
     }
 
+    // Reads a particular block from memory, passing only the section requested by a "read" call
     private MemoryResult readBlockRange(long block, int offset, int count) {
         int toWait = 0;
 
@@ -146,6 +148,7 @@ public final class L2Cache implements BackingStore {
         }
     }
 
+    // Reads from memory
     @Override
     public MemoryResult write(long address, byte[] data) {
         Objects.requireNonNull(data, "data");
@@ -165,9 +168,11 @@ public final class L2Cache implements BackingStore {
             copied += count;
         }
 
+        logger.verbose("[%d] L2 CACHE: returning from entire write.", hartId);
         return new MemoryResult(toWait, null);
     }
 
+    // Updates a block of memory
     private MemoryResult writeBlockRange(
             long block, int offset, byte[] source, int sourceOffset, int count) {
         logger.verbose("[%d] L2 CACHE: writeBlockRange block %d, offset %d, %d-byte source, src-offset %d, count %d",
@@ -193,7 +198,6 @@ public final class L2Cache implements BackingStore {
                     byte[] newBlock = line.data.clone();
                     System.arraycopy(source, sourceOffset, newBlock, offset, count);
                     MemoryResult result = backingStore.write(block, newBlock);
-                    logger.verbose("[%d] L2 CACHE: updated backing store for %d stall(s).", hartId, result.shouldWait());
                     toWait += result.shouldWait();
                     line.state = MESI.EXCLUSIVE;
                 }
@@ -204,7 +208,6 @@ public final class L2Cache implements BackingStore {
                 if (line.state == MESI.EXCLUSIVE && writeBack) {
                     line.state = MESI.MODIFIED;
                 }
-                logger.verbose("[%d] L2 CACHE: updated local cache to match backing store.", hartId);
 
                 return new MemoryResult(toWait, null);
             }
@@ -298,7 +301,7 @@ public final class L2Cache implements BackingStore {
                     line.state = MESI.MODIFIED;
                 }
 
-                logger.verbose("[%d] L2 CACHE: Finished write, requesting %d stall(s).", hartId, toWait);
+                logger.verbose("[%d] L2 CACHE: returning from writeBlockRange.", hartId);
                 return new MemoryResult(toWait, null);
             }
         }

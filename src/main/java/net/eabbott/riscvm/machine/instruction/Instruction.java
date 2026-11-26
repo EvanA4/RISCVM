@@ -2,6 +2,9 @@ package net.eabbott.riscvm.machine.instruction;
 
 import net.eabbott.riscvm.util.BinaryUtil;
 
+/**
+ * A 4-byte instruction parser.
+ */
 public class Instruction {
     private byte[] inst;
 
@@ -9,6 +12,9 @@ public class Instruction {
         this.inst = inst;
     }
 
+    /**
+     * Returns the opcode of the instruction
+     */
     public Opcode opcode() {
         int opcodeNum = BinaryUtil.intFromBits(this.inst, 0, 7, false);
         return Opcode.fromInt(opcodeNum);
@@ -45,26 +51,44 @@ public class Instruction {
         };
     }
 
+    /**
+     * Returns the rd of the instruction
+     */
     public int rd() {
         return BinaryUtil.intFromBits(this.inst, 7, 5, false);
     }
 
+    /**
+     * Returns the funct3 of the instruction
+     */
     public int funct3() {
         return BinaryUtil.intFromBits(this.inst, 12, 3, false);
     }
 
+    /**
+     * Returns the rs1 of the instruction
+     */
     public int rs1() {
         return BinaryUtil.intFromBits(this.inst, 15, 5, false);
     }
 
+    /**
+     * Returns the rs2 of the instruction
+     */
     public int rs2() {
         return BinaryUtil.intFromBits(this.inst, 20, 5, false);
     }
 
+    /**
+     * Returns the funct7 of the instruction
+     */
     public int funct7() {
         return BinaryUtil.intFromBits(this.inst, 25, 7, false);
     }
 
+    /**
+     * Returns the ALU operation of an assumed R-type instruction
+     */
     private ALUOp aluOpR() {
         int funct3 = this.funct3();
         int funct7 = this.funct7();
@@ -106,6 +130,9 @@ public class Instruction {
         };
     }
 
+    /**
+     * Returns the ALU operation of an assumed I-type instruction
+     */
     private ALUOp aluOpI() {
         int imm = this.imm();
         int funct3 = this.funct3();
@@ -127,6 +154,9 @@ public class Instruction {
         return parsed;
     }
 
+    /**
+     * Returns the ALU operation of an instruction
+     */
     public ALUOp aluOp() {
         Opcode opcode = this.opcode();
         if (opcode == Opcode.OP_IMM) return this.aluOpI();
@@ -134,6 +164,9 @@ public class Instruction {
         else throw new RuntimeException("Tried to get ALUOp from non-OP_IMM/OP.");
     }
 
+    /**
+     * Returns whether the instruction is an ECALL
+     */
     public boolean isECALL() {
         return this.inst[0] == 0x73
             && this.inst[1] == 0x00
@@ -141,6 +174,9 @@ public class Instruction {
             && this.inst[3] == 0x00;
     }
 
+    /**
+     * Returns whether the instruction is a NOP
+     */
     public boolean isNOP() {
         return this.inst[0] == 0x13
             && this.inst[1] == 0x00
@@ -148,6 +184,9 @@ public class Instruction {
             && this.inst[3] == 0x00;
     }
 
+    /**
+     * Returns whether the instruction is an SFENCE.VMA
+     */
     public boolean isSFENCE() {
         Opcode opcode = this.opcode();
         int funct3 = this.funct3();
@@ -159,6 +198,9 @@ public class Instruction {
             && rd == 0;
     }
 
+    /**
+     * Returns the CSR operation of the instruction
+     */
     public CSROp csrOp() {
         Opcode opcode = this.opcode();
         int funct3 = this.funct3();
@@ -167,6 +209,9 @@ public class Instruction {
         return CSROp.fromValue(funct3);
     }
 
+    /**
+     * Returns the rl of the instruction
+     */
     public int rl() {
         Opcode opcode = this.opcode();
         if (opcode != Opcode.AMO)
@@ -174,6 +219,9 @@ public class Instruction {
         return BinaryUtil.intFromBits(this.inst, 25, 1, false);
     }
 
+    /**
+     * Returns the aq of the instruction
+     */
     public int aq() {
         Opcode opcode = this.opcode();
         if (opcode != Opcode.AMO)
@@ -181,6 +229,9 @@ public class Instruction {
         return BinaryUtil.intFromBits(this.inst, 26, 1, false);
     }
 
+    /**
+     * Returns the funct5 of the instruction
+     */
     public int funct5() {
         Opcode opcode = this.opcode();
         if (opcode != Opcode.AMO)
@@ -188,6 +239,9 @@ public class Instruction {
         return BinaryUtil.intFromBits(this.inst, 27, 5, false);
     }
 
+    /**
+     * Returns the AMO operation of the instruction
+     */
     public AMOOp amoOp() {
         Opcode opcode = this.opcode();
         if (opcode != Opcode.AMO)
@@ -210,6 +264,9 @@ public class Instruction {
         };
     }
 
+    /**
+     * Returns whether the instruction is empty
+     */
     public boolean isEmpty() {
         return this.inst.length == 0;
     }

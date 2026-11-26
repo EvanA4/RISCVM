@@ -13,8 +13,8 @@ import net.eabbott.riscvm.util.BinaryUtil;
 
 import java.util.concurrent.CyclicBarrier;
 
-/*
-* Hart definition of the virtual machine. Has its own PC, ID, pipeline, and CSR and register files.
+/**
+* Each hart of the virtual machine. Has its own PC, ID, pipeline, and CSR and register files.
 * */
 public class Hart {
     public Thread[] threads;
@@ -56,10 +56,3 @@ public class Hart {
         for (int i = 0; i < 5; ++i) threads[i].start();
     }
 }
-
-/*
-* Fancy pipeline operations:
-* - Branch mispredictions: SQUASH a stage
-* - Stale registers between writeback and decode: FORWARD
-* - Decode needs a load value: STALL and FORWARD
-* */

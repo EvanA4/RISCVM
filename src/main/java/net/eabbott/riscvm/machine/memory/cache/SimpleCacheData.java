@@ -8,6 +8,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * An encapsulation of a dirty/clean cache's local data, abstracting away cache associativity.
+ */
 public class SimpleCacheData {
     private final CacheContext context;
     private final int numLines;

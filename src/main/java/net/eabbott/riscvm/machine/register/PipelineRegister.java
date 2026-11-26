@@ -68,8 +68,8 @@ public class PipelineRegister {
         this.predictedNextPc[0] = 0;
     }
 
+    // Sets pipeline register to ADDI x0, x0, 0
     public void setNextToNop() {
-        // Sets pipeline register to ADDI x0, x0, 0
         this.inst[0] = new byte[]{ 0x13, 0x00, 0x00, 0x00 };
         this.pc[0] = 0;
         this.left[0] = 0;
@@ -86,6 +86,7 @@ public class PipelineRegister {
         this.predictedNextPc[0] = 0;
     }
 
+    // Prints the current read-only status of the pipeline register
     public void dump(String label) {
         VMLogger logger = VMLogger.getInstance();
         logger.lock();
@@ -116,6 +117,9 @@ public class PipelineRegister {
     * Getters and setters for the pipeline register.
     * Getters read from the read-only half, while the
     * setters write to the write-only half.
+    *
+    * I am not providing a comment for each of them,
+    * despite what the writeup requests.
     * */
 
     public int getPredictedNextPc() {

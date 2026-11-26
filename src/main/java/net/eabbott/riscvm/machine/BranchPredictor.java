@@ -4,7 +4,7 @@ import net.eabbott.riscvm.util.VMLogger;
 
 import java.util.Arrays;
 
-/*
+/**
 * A class wrapper of the branch target buffer and branch prediction table.
 * */
 public class BranchPredictor {
@@ -23,7 +23,7 @@ public class BranchPredictor {
         Arrays.fill(this.branchPredictionTable, defaultPrediction);
     }
 
-    /*
+    /**
     * Returns the next PC to jump to, accounting for the branch prediction table.
     * Returns -1 if the PC is not in the branch target buffer or the prediction is false.
     * */
@@ -46,7 +46,7 @@ public class BranchPredictor {
         return jumpLocation;
     }
 
-    /*
+    /**
     * Updates the jump location and prediction value for a given instruction address.
     * */
     public void update(int programCounter, int jumpLocation, boolean increment) {

@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.machine.instruction;
 
+/**
+ * An enum representing the ALU operation necessary for a given instruction.
+ */
 public enum ALUOp {
     Add,         // Signed addition
     Sub,         // Signed subtraction (or comparison for BRANCH)
@@ -24,14 +27,17 @@ public enum ALUOp {
     And,         // Bitwise AND
     None;
 
+    // Converts an ALU operation into its corresponding byte
     public byte toByte() {
         return (byte) this.ordinal();
     }
 
+    // Converts a byte into its corresponding ALU operation
     public static ALUOp fromByte(byte src) {
         return ALUOp.values()[src];
     }
 
+    // Specifies whether an ALU operation is a part of the multiplication extension for RISCV
     public static boolean isM(ALUOp aluOp) {
         return switch (aluOp) {
             case Mul, MulH, MulHSU, MulHU, Div, DivU, Rem, RemU -> true;

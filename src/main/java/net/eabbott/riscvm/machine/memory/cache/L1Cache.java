@@ -70,11 +70,12 @@ public final class L1Cache implements BackingStore {
         }
     }
 
+    // A shallow invalidation which ignores dirty entries
     public void invalidateAll() {
-        // Shallow invalidation ignores dirty entries
         lines.invalidateAll();
     }
 
+    // Reads from memory
     @Override
     public MemoryResult read(long address, int size) {
         int toWait = 0;
@@ -98,6 +99,7 @@ public final class L1Cache implements BackingStore {
         return new MemoryResult(toWait, output);
     }
 
+    // Reads a particular block from memory, passing only the section requested by a "read" call
     private MemoryResult readBlockRange(long block, int offset, int count) {
         int toWait = 0;
 
@@ -146,6 +148,7 @@ public final class L1Cache implements BackingStore {
         }
     }
 
+    // Reads from memory
     @Override
     public MemoryResult write(long address, byte[] data) {
         Objects.requireNonNull(data, "data");
@@ -169,6 +172,7 @@ public final class L1Cache implements BackingStore {
         return new MemoryResult(toWait, null);
     }
 
+    // Updates a block of memory
     private MemoryResult writeBlockRange(
             long block, int offset, byte[] source, int sourceOffset, int count) {
         logger.verbose("[%d] L1 CACHE: writeBlockRange block %d, offset %d, %d-byte source, src-offset %d, count %d",

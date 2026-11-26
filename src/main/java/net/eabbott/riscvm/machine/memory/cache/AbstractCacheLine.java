@@ -2,6 +2,9 @@ package net.eabbott.riscvm.machine.memory.cache;
 
 import net.eabbott.riscvm.context.cache.CacheEvictionPolicy;
 
+/**
+ * Defines the general aspects of a cache line
+ */
 public abstract class AbstractCacheLine {
     final long blockAddress;
     final byte[] data;
@@ -17,6 +20,7 @@ public abstract class AbstractCacheLine {
         this.lastUsed = timestamp;
     }
 
+    // Updates a line's use counter and time it was last used
     public void touch(long clock) {
         this.frequency++;
         this.lastUsed = ++clock;

@@ -38,6 +38,7 @@ public final class L3Cache implements BackingStore {
         this.lines = new SimpleCacheData(context);
     }
 
+    // Reads from memory
     @Override
     public MemoryResult read(long address, int size) {
         LOCK.lock();
@@ -65,6 +66,7 @@ public final class L3Cache implements BackingStore {
         }
     }
 
+    // Writes to memory
     @Override
     public MemoryResult write(long address, byte[] data) {
         Objects.requireNonNull(data, "data");
@@ -98,6 +100,7 @@ public final class L3Cache implements BackingStore {
         }
     }
 
+    // Reads a particular block from memory, passing only the relevant section to the "read" call
     private MemoryResult readBlockRange(long blockAddress, int offset, int count) {
         int toWait = 0;
 
@@ -117,6 +120,7 @@ public final class L3Cache implements BackingStore {
         return new MemoryResult(toWait, range);
     }
 
+    // Updates a block in memory
     private MemoryResult writeBlockRange(long blockAddress, int offset, byte[] source, int sourceOffset, int count) {
         int toWait = 0;
 
@@ -143,6 +147,7 @@ public final class L3Cache implements BackingStore {
         return new MemoryResult(toWait, null);
     }
 
+    // Reads from the backing store, saving it into the local cache
     private FetchResult fetchBackingStore(long blockAddress) {
         int toWait = 0;
 
@@ -168,6 +173,7 @@ public final class L3Cache implements BackingStore {
         return new FetchResult(toWait, line);
     }
 
+    // Converts an address into the starting address of its corresponding block
     private long blockAddress(long address) {
         return address - Math.floorMod(address, blockSize);
     }

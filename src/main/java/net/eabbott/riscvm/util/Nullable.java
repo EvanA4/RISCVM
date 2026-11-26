@@ -7,8 +7,8 @@ import java.lang.annotation.Target;
 import static java.lang.annotation.ElementType.TYPE_USE;
 import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
-/*
-* An annotation for whether a variable is potentially null.
+/**
+* An annotation for whether a variable is potentially null. Kinda stopped using this half-way through. :)
 * */
 @Documented
 @Target(TYPE_USE)

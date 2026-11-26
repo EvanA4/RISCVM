@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
 
-/*
+/**
 * The core virtual machine class, with multiple-hart capacity.
 * */
 public class VirtualMachine {
@@ -34,6 +34,9 @@ public class VirtualMachine {
     public L3Cache l3;
     public TLB tlb;
 
+    /**
+     * A cheeky function to create a global VirtualMachine instance.
+     */
     public static @Nullable VirtualMachine create(Context context) {
         instance = new VirtualMachine();
         instance.logger = VMLogger.getInstance();
@@ -192,12 +195,14 @@ public class VirtualMachine {
 
 /*
 * TODO:
-*   - MMU should be able to requests stalls
-*   - Fetch stage should be able to insert bubbles if stalls are necessary
+*   - confirm whether FETCH needs to stall for cache misses and whatnot
+*   - FETCH branch prediction should also support JAL and maybe JALR
+*   - throw an ILLEGAL INSTRUCTION error if DECODE detects an AMO instruction without the A extension
+*   - `nothing.elf` gets freaky with multiple harts
 *   - All hart statuses should be reachable
 *       - check if all memory fault exceptions are caught
 * */
 
 /*
-./run.sh -i elfs/nothing.elf -harts 1 -mmu off -cL 0 -log i -hz 100000
+./run.sh -i elfs/nothing.elf -harts 1 -mmu on -cL 3 -log i -hz 100000
  */

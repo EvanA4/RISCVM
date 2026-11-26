@@ -9,7 +9,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.locks.ReentrantLock;
 
-/*
+/**
 * The logger for the entire virtual machine application.
 * */
 public class VMLogger {
@@ -18,13 +18,16 @@ public class VMLogger {
     private LogType minLevel;
     private ReentrantLock lock;
 
-    /*
+    /**
     * A cheeky function allowing for a global VMLogger object.
     * */
     public static VMLogger getInstance() {
         return instance;
     }
 
+    /**
+     * Creates the global instance with a minimum logging level filter
+     */
     public synchronized static void create(LogType minLevel) {
         instance = new VMLogger();
         instance.minLevel = minLevel;
@@ -46,7 +49,7 @@ public class VMLogger {
         }
     }
 
-    /*
+    /**
      * A basic string formatting log function. Logs to the correct location.
      * */
     private void log(LogType logType, String format, Object... args) {
@@ -72,6 +75,8 @@ public class VMLogger {
         }
     }
 
+    // Logger functions for each logging level...
+
     public void verbose(String format, Object... args) {
         log(LogType.VERBOSE, "[VERBOSE] " + format, args);
     }
@@ -96,14 +101,14 @@ public class VMLogger {
         log(LogType.FATAL, "[FATAL] " + format, args);
     }
 
-    /*
+    /**
     * Helpful binary logging for debugging.
     * */
     public void logBytes(byte[] src) {
         this.logBytes(src, 4, false);
     }
 
-    /*
+    /**
      * Helpful binary logging for debugging.
      * */
     public void logBytes(byte[] src, int bytesPerLine, boolean reverse) {
@@ -130,7 +135,7 @@ public class VMLogger {
         }
     }
 
-    /*
+    /**
      * Converts a byte into a series of 1's and 0's.
      * */
     private String stringifyByte(byte src) {
@@ -139,17 +144,19 @@ public class VMLogger {
         return String.format("%8s", binary).replace(' ', '0');
     }
 
-    /*
-     * Change the logging level mid-run.
+    /**
+     * Change the logging level mid-run. Helpful for debugging.
      */
     public void setLevel(LogType logType) {
         this.minLevel = logType;
     }
 
+    // Creates a logging session for multi-call log blocks. Helpful for dumping objects.
     public void lock() {
         lock.lock();
     }
 
+    // Finishes a logging session for multi-call log blocks.
     public void unlock() {
         lock.unlock();
     }

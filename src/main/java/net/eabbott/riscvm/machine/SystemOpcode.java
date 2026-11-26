@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.machine;
 
+/**
+ * An enum representing the opcode for a system call request. NONE means to perform no operation.
+ */
 public enum SystemOpcode {
     NONE(-1),
     EXIT(0),
@@ -19,6 +22,7 @@ public enum SystemOpcode {
         return value;
     }
 
+    // Parses the a7 register for a system opcode
     public static SystemOpcode fromValue(int value) {
         return switch (value) {
             case 0 -> EXIT;

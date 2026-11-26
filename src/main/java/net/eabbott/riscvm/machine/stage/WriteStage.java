@@ -10,6 +10,9 @@ import net.eabbott.riscvm.util.VMLogger;
 
 import java.util.concurrent.CyclicBarrier;
 
+/**
+ * The pipeline write stage
+ */
 public class WriteStage extends AbstractStage {
     private final VMLogger logger = VMLogger.getInstance();
     private final Hart hart;
@@ -32,6 +35,7 @@ public class WriteStage extends AbstractStage {
         this.forwardBarrier = new CyclicBarrier(2);
     }
 
+    // Executes the rising edge of the WRITE stage
     @Override
     public void rising() {
         // ALWAYS snapshot current prevReg
@@ -50,6 +54,7 @@ public class WriteStage extends AbstractStage {
         logger.debug("Running rising edge for write stage for hart #%d", hart.id);
     }
 
+    // Executes the falling edge of the WRITE stage
     @Override
     public void falling() {
         logger.debug("Running falling edge for write stage for hart #%d", hart.id);

@@ -10,6 +10,9 @@ import net.eabbott.riscvm.machine.instruction.Opcode;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.util.VMLogger;
 
+/**
+ * The pipeline execute stage.
+ */
 public class ExecuteStage extends AbstractStage {
     private final VMLogger logger = VMLogger.getInstance();
     private final Hart hart;
@@ -23,6 +26,7 @@ public class ExecuteStage extends AbstractStage {
         this.nextReg = hart.pipelineRegisters[2];
     }
 
+    // Performs the appropriate CSR operation
     private int executeCSR(Instruction instruction, int source) {
         int funct3 = instruction.funct3();
         int csr = instruction.imm();
@@ -31,7 +35,7 @@ public class ExecuteStage extends AbstractStage {
         int oldValue;
         try {
             oldValue = hart.csrFile.read(csr);
-            logger.warning("[%d] Read value %d from CSR %x", hart.id, oldValue, csr);
+            logger.verbose("[%d] Read value %d from CSR %x", hart.id, oldValue, csr);
 
             int newValue = switch (funct3) {
                 case 0b001, 0b101 -> source;                 // CSRRW, CSRRWI
@@ -62,6 +66,7 @@ public class ExecuteStage extends AbstractStage {
         }
     }
 
+    // Executes the rising edge of the EXECUTE stage
     @Override
     public void rising() {
         // TODO: REMOVE THIS
@@ -198,6 +203,7 @@ public class ExecuteStage extends AbstractStage {
         nextReg.setPredictedNextPc(prevReg.getPredictedNextPc());
     }
 
+    // Executes the falling edge of the EXECUTE stage
     @Override
     public void falling() {
         logger.debug("Running falling edge for execute stage for hart #%d", hart.id);

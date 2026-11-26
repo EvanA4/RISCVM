@@ -17,10 +17,12 @@ public final class TLB {
         this.policy = Objects.requireNonNull(policy, "policy");
     }
 
+    // Getter for capacity
     public synchronized int capacity() {
         return entries.length;
     }
 
+    // Getter for isEnabled
     public synchronized boolean isEnabled() {
         return entries.length > 0;
     }
@@ -109,6 +111,9 @@ public final class TLB {
         return victim;
     }
 
+    /**
+     * Returns whether one TLB entry should be prioritized over another for eviction.
+     */
     private boolean isOlder(TLBEntry candidate, int candidateIndex,
                             TLBEntry current, int currentIndex) {
         return switch (policy) {

@@ -94,15 +94,18 @@ public final class MemoryManager {
         else this.top = machine.ram;
     }
 
+    // Executes the SFENCE operation
     public void sfenceVma(long rs1, long rs2) {
         mmu.sfenceVma(rs1, rs2);
     }
 
+    // Invalidates the L1 and L2 caches associated with the current hart
     public void invalidateAll() {
         l1.invalidateAll();
         l2.invalidateAll();
     }
 
+    // Reads from memory
     public MemoryResult read(long address, int size, AccessType accessType) throws MemoryFault {
         int toWait = 0;
 
@@ -125,6 +128,7 @@ public final class MemoryManager {
         return new MemoryResult(toWait, result.data());
     }
 
+    // Writes to memory
     public MemoryResult write(long address, byte[] data, AccessType accessType) throws MemoryFault {
         int toWait = 0;
 
@@ -150,6 +154,7 @@ public final class MemoryManager {
 
     // Atomic-relevant code below:
 
+    // Performs a read-modify-write atomic instruction
     public AMOResult rmw(long address, IntUnaryOperator func) throws MemoryFault {
         int toWait = 0;
 
@@ -180,6 +185,7 @@ public final class MemoryManager {
         }
     }
 
+    // Performs a load-reserved operation
     public AMOResult loadReserved(long address) throws MemoryFault {
         int toWait = 0;
 
@@ -206,6 +212,7 @@ public final class MemoryManager {
         }
     }
 
+    // Performs a store conditional operation
     public AMOResult storeConditional(long address, int value) throws MemoryFault {
         int toWait = 0;
 

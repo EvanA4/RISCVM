@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.machine.instruction;
 
+/**
+ * An enum representing the CSR operation
+ */
 public enum CSROp {
     CSRRW(0b001),
     CSRRS(0b010),
@@ -14,6 +17,7 @@ public enum CSROp {
         this.value = value;
     }
 
+    // Parses the CSR operation from a non-zero funct3 field
     public static CSROp fromValue(int value) {
         return switch (value) {
             case 0b001 -> CSRRW;

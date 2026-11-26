@@ -2,7 +2,7 @@ package net.eabbott.riscvm.machine.register;
 
 import net.eabbott.riscvm.util.VMLogger;
 
-/*
+/**
 * Each virtual machine's hart's register file.
 * */
 public class RegisterFile {
@@ -10,7 +10,7 @@ public class RegisterFile {
     int[] registers = new int[32];
     final VMLogger logger = VMLogger.getInstance();
 
-    /*
+    /**
     * Read a register by its number, with 0 always returning 0
     * */
     public int read(int register) {
@@ -18,7 +18,7 @@ public class RegisterFile {
         return this.registers[register];
     }
 
-    /*
+    /**
     * Write a value to a register by its number
     * */
     public void write(int register, int value) {

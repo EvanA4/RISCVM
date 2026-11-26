@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.machine;
 
+/**
+ * An enum representing the current status of a hart.
+ */
 public enum HartStatus {
     RUNNING,
     STOPPED,

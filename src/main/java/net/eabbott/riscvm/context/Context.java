@@ -9,7 +9,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.*;
 
-/*
+/**
 * The main argument parsing class.
 * */
 public class Context extends AbstractContext {
@@ -21,7 +21,7 @@ public class Context extends AbstractContext {
     };
     private final Set<String> VALID_ARGS_SET = new HashSet<>(Arrays.stream(VALID_ARGS).toList());
 
-    /*
+    /**
     * A static method for creating an argument-populated context class with one function call.
     * */
     public static @Nullable Context parseArgs(String[] args) {
@@ -53,7 +53,7 @@ public class Context extends AbstractContext {
         }
     }
 
-    /*
+    /**
     * A big, ugly function for printing all the configurations of the virtual machine.
     * */
     @Override
@@ -94,7 +94,7 @@ public class Context extends AbstractContext {
         logger.verbose("##### CONTEXT DUMP #####");
     }
 
-    /*
+    /**
     * Does a quick pass through the arguments to determine if there's a config file.
     * */
     private @Nullable String getConfigFile(String[] args) throws IllegalArgumentException {
@@ -112,7 +112,7 @@ public class Context extends AbstractContext {
         return output;
     }
 
-    /*
+    /**
     * Converts any valid configuration file into fake command line arguments. Forwards the fake arguments to the
     * command line argument parser.
     * */
@@ -166,7 +166,7 @@ public class Context extends AbstractContext {
         }
     }
 
-    /*
+    /**
     * The command line parsing function.
     * */
     private void readCommandLine(String[] args) {
@@ -293,7 +293,7 @@ public class Context extends AbstractContext {
         }
     }
 
-    /*
+    /**
      * Returns logging level for application.
      */
     private LogType parseLogType(String value) {
@@ -309,7 +309,7 @@ public class Context extends AbstractContext {
         };
     }
 
-    /*
+    /**
     * Returns true if a passed argument is truthy for boolean flags.
     * */
     private boolean parseBoolean(String value, String name, String truthy, String falsey) {
@@ -320,7 +320,7 @@ public class Context extends AbstractContext {
         );
     }
 
-    /*
+    /**
     * Returns an argument value as a parsed long, accounting for metric prefixes.
     * */
     private long parseMetric(String value, String name) {
@@ -372,7 +372,7 @@ public class Context extends AbstractContext {
         };
     }
 
-    /*
+    /**
     * Parses an argument value as a cache associativity.
     * */
     private CacheAssociativity parseCacheAssociativity(String value, String name) {
@@ -407,7 +407,7 @@ public class Context extends AbstractContext {
         }
     }
 
-    /*
+    /**
     * Returns an argument value parsed as an integer.
     * */
     private int parseInteger(String value, String name) {
@@ -420,7 +420,7 @@ public class Context extends AbstractContext {
         }
     }
 
-    /*
+    /**
     * Returns an argument value parsed as a cache coherency.
     * */
     private CacheCoherency parseCacheCoherency(String value, String name) {
@@ -440,7 +440,7 @@ public class Context extends AbstractContext {
         }
     }
 
-    /*
+    /**
     * Returns an argument value parsed as an eviction policy.
     * */
     private CacheEvictionPolicy parseEvictionPolicy(String value, String name) {

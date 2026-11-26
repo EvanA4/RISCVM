@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.util;
 
+/**
+ * A helper class for simple binary operations.
+ */
 public class BinaryUtil {
     /**
     * Sign extends an integer at a given index. We're all adults here, right?

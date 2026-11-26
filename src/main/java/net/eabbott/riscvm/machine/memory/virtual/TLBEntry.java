@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.machine.memory.virtual;
 
+/**
+ * Represents an entry within the TLB
+ */
 public final class TLBEntry {
     private final int level;
     private final int vpn;

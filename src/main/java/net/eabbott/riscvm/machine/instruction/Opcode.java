@@ -2,6 +2,9 @@ package net.eabbott.riscvm.machine.instruction;
 
 import net.eabbott.riscvm.util.Nullable;
 
+/**
+ * An enum representing the opcode of an instruction.
+ */
 public enum Opcode {
     LOAD(0b00_000_11),
     STORE(0b01_000_11),
@@ -21,6 +24,7 @@ public enum Opcode {
         this.value = value;
     }
 
+    // Parses an opcode from a masked instruction
     public @Nullable static Opcode fromInt(int value) {
         return switch (value) {
             case 0b00_000_11 -> LOAD;

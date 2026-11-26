@@ -3,7 +3,7 @@ package net.eabbott.riscvm.util;
 import java.io.FileWriter;
 import java.io.IOException;
 
-/*
+/**
 * The logger for the entire virtual machine application.
 * */
 public class MachineIO {
@@ -14,14 +14,14 @@ public class MachineIO {
         instance = this;
     }
 
-    /*
+    /**
     * A cheeky function allowing for a global VMLogger object.
     * */
     public static MachineIO getInstance() {
         return instance;
     }
 
-    /*
+    /**
     * Only called if meant to log to an actual file.
     * */
     public void open(String fileName) {
@@ -34,7 +34,7 @@ public class MachineIO {
         }
     }
 
-    /*
+    /**
     * A basic string formatting log function. Logs to the correct location.
     * */
     public void print(char src) {
@@ -48,7 +48,7 @@ public class MachineIO {
         }
     }
 
-    /*
+    /**
      * A basic string formatting log function. Logs to the correct location.
      * */
     public char read() {

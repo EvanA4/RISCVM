@@ -10,7 +10,7 @@ import net.eabbott.riscvm.machine.instruction.Opcode;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.util.VMLogger;
 
-/*
+/**
 * The pipeline decode stage.
 * */
 public class DecodeStage extends AbstractStage {
@@ -30,6 +30,7 @@ public class DecodeStage extends AbstractStage {
         this.allowA = machine.context.allowRV32A;
     }
 
+    // Executes the rising edge of the DECODE stage
     public void rising() {
         // TODO: REMOVE THIS
         // Instruction tmp = new Instruction(this.prevReg.getInst());
@@ -286,6 +287,7 @@ public class DecodeStage extends AbstractStage {
         }
     }
 
+    // Executes the falling edge of the DECODE stage
     public void falling() {
         logger.debug("Running falling edge for decode stage for hart #%d", this.hart.id);
         
@@ -300,7 +302,8 @@ public class DecodeStage extends AbstractStage {
             this.hart.pipelineRegisters[1].tick();
         }
     }
-    
+
+    // Helper function to handle illegal instructions, parking the hart
     private void onIllegalInstruction() {
         VirtualMachine.getInstance().parkHart(this.hart.id, HartStatus.ILLEGAL_INSTRUCTION);
         this.needToNOP = true;

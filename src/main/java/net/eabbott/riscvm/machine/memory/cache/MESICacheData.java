@@ -9,6 +9,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * An encapsulation of a MESI cache's local data, abstracting away cache associativity.
+ */
 public class MESICacheData {
     private final CacheContext context;
     private final int numLines;
@@ -38,6 +41,7 @@ public class MESICacheData {
         }
     }
 
+    // Empties the local cache, not writing anything back
     public void invalidateAll() {
         switch (context.ca.type) {
             case DIRECT_MAPPED -> {

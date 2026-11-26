@@ -14,6 +14,9 @@ import net.eabbott.riscvm.util.VMLogger;
 
 import java.util.Arrays;
 
+/**
+ * The pipeline memory stage.
+ */
 public class MemoryStage extends AbstractStage {
     private final VMLogger logger = VMLogger.getInstance();
     private final Hart hart;
@@ -30,6 +33,7 @@ public class MemoryStage extends AbstractStage {
         this.nextReg = hart.pipelineRegisters[3];
     }
 
+    // Executes the rising edge of the MEMORY stage
     @Override
     public void rising() {
         // TODO: REMOVE THIS
@@ -188,6 +192,7 @@ public class MemoryStage extends AbstractStage {
         }
     }
 
+    // Executes the rising edge of the MEMORY stage
     @Override
     public void falling() {
         logger.debug("Running falling edge for memory stage for hart #%d", hart.id);
@@ -204,6 +209,7 @@ public class MemoryStage extends AbstractStage {
         }
     }
 
+    // If a memory operation requests a stall, stall :)
     private void setStall() {
         hart.stages[0].needToFreeze = true;
         hart.stages[1].needToFreeze = true;

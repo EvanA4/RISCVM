@@ -7,6 +7,9 @@ import net.eabbott.riscvm.machine.VirtualMachine;
 import net.eabbott.riscvm.util.BinaryUtil;
 import net.eabbott.riscvm.util.VMLogger;
 
+/**
+ * The MMU for translating virtual addresses into physical ones.
+ */
 public final class MMU {
     public record TranslateResult(int shouldWait, long address){}
     private record PTEResult(int shouldWait, int pte){}
@@ -64,6 +67,9 @@ public final class MMU {
         }
     }
 
+    /**
+     * Traverses through the user-provided page table to find a leaf entry
+     */
     private TLBResult walkPageTable(long va, AccessType access) throws MemoryFault {
         int toWait = 0;
         long currentSatp = this.hart.csrFile.read(CSRFile.SATP);
@@ -127,6 +133,9 @@ public final class MMU {
         throw new MemoryFault(access, va, "No valid SV32 translation");
     }
 
+    /**
+     * Reads a page table entry from memory, requesting stalls if necessary
+     */
     private PTEResult readPte(long va, long pteAddress) throws MemoryFault {
         checkPhysicalBounds(va, pteAddress, 4);
         try {
@@ -147,6 +156,9 @@ public final class MMU {
         }
     }
 
+    /**
+     * Checks whether the page entry and access type align
+     */
     private void checkPermission(TLBEntry entry, long va, AccessType access) throws MemoryFault {
         boolean permitted = switch (access) {
             case FETCH -> entry.permitsExecute();
@@ -159,6 +171,9 @@ public final class MMU {
         }
     }
 
+    /**
+     * Checks whether the physical address falls outside RAM
+     */
     private void checkPhysicalBounds(long va, long pa, int sizeBytes) throws MemoryFault {
         long ramSize = this.machine.ram.length();
 

@@ -13,7 +13,7 @@ import net.eabbott.riscvm.util.VMLogger;
 
 import java.nio.ByteBuffer;
 
-/*
+/**
  * The pipeline fetch stage.
  * */
 public class FetchStage extends AbstractStage {
@@ -32,6 +32,7 @@ public class FetchStage extends AbstractStage {
         this.nextReg = this.hart.pipelineRegisters[0];
     }
 
+    // Executes the rising edge of the FETCH stage
     public void rising() {
         // TODO: REMOVE THIS BLOCK WHICH NOPS IF INSTRUCTION IN PIPELINE
         // for (int i = 0; i < 4; ++i) {
@@ -87,7 +88,7 @@ public class FetchStage extends AbstractStage {
             hart.programCounter = previousCounter;
 
         } else if (result.shouldWait() > 0) {
-            logger.warning("Failed to fetch instruction, stalling %d cycles!", result.shouldWait());
+            logger.verbose("Failed to fetch instruction, stalling %d cycles!", result.shouldWait());
             toWait = result.shouldWait() - 1;
             fetchResult = result.data();
             needToNOP = true;
@@ -101,6 +102,7 @@ public class FetchStage extends AbstractStage {
         }
     }
 
+    // Executes the falling edge of the FETCH stage
     public void falling() {
         logger.debug("Running falling edge for fetch stage for hart #%d", this.hart.id);
         logger.debug("Hart status: %s", this.hart.status.name());

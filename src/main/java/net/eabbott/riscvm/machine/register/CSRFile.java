@@ -3,7 +3,7 @@ package net.eabbott.riscvm.machine.register;
 import net.eabbott.riscvm.context.Context;
 import net.eabbott.riscvm.machine.VirtualMachine;
 
-/*
+/**
 * A collection of every CSR for RISCV.
 * */
 public class CSRFile {
@@ -36,7 +36,7 @@ public class CSRFile {
         }
     }
 
-    /*
+    /**
     * Returns the value of a CSR.
     * */
     public int read(int csr) {
@@ -55,7 +55,7 @@ public class CSRFile {
         }
     }
 
-    /*
+    /**
     * Writes to the satp CSR or throws an exception.
     * */
     public void write(int csr, int value) {
@@ -68,7 +68,7 @@ public class CSRFile {
         }
     }
 
-    /*
+    /**
     * Updates the read only cycle counter CSRs.
     * */
     public void incrementCycle() {
@@ -77,12 +77,18 @@ public class CSRFile {
         }
     }
 
+    /**
+     * Increments the retired instruction counter (more like the instruction fetch counter)
+     */
     public void incrementInstret() {
         if (this.instret++ == -1) {
             this.instretH++;
         }
     }
 
+    /**
+     * Updates the time CSRs of the hart
+     */
     public void updateTime() {
         long unixSeconds = java.time.Instant.now().getEpochSecond();
         this.time = (int) unixSeconds;

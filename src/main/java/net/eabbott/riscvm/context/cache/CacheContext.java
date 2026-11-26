@@ -1,6 +1,6 @@
 package net.eabbott.riscvm.context.cache;
 
-/*
+/**
 * A data structure class for all cache configurations.
 * */
 public class CacheContext {
@@ -10,6 +10,7 @@ public class CacheContext {
     public boolean isWriteBack;
     public CacheEvictionPolicy eviction;
 
+    // The all-args constructor for the CacheContext class
     public CacheContext(CacheAssociativity ca, long size, int blockSize, boolean isWriteBack, CacheEvictionPolicy eviction) {
         this.ca = ca;
         this.size = size;

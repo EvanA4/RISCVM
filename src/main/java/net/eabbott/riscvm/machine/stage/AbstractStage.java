@@ -1,6 +1,6 @@
 package net.eabbott.riscvm.machine.stage;
 
-/*
+/**
 * The generic definition of a pipeline stage.
 * */
 public abstract class AbstractStage {

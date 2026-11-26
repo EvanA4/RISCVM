@@ -5,6 +5,9 @@ import net.eabbott.riscvm.util.BinaryUtil;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 
+/**
+ * An ELF program header reader.
+ */
 public class ELFProgramHeader {
     public int type;
     public int offset;
@@ -15,12 +18,14 @@ public class ELFProgramHeader {
     public int flags;
     public int align;
 
+    // Reads a program header given the file reader object and location
     public static ELFProgramHeader read(RandomAccessFile reader, int offset) throws IOException {
         ELFProgramHeader programHeader = new ELFProgramHeader();
         byte[] rawHeader = new byte[32];
         reader.seek(offset);
         reader.read(rawHeader);
 
+        // An ocean of reading integers from bytes in little-endian format
         programHeader.type = BinaryUtil.intFromBytesLE(rawHeader, 0, 4);
         programHeader.offset = BinaryUtil.intFromBytesLE(rawHeader, 4, 4);
         programHeader.vaddr = BinaryUtil.intFromBytesLE(rawHeader, 8, 4);

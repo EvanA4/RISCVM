@@ -5,7 +5,7 @@ import net.eabbott.riscvm.context.elf.ELFContext;
 import net.eabbott.riscvm.util.Nullable;
 import net.eabbott.riscvm.util.MachineIO;
 
-/*
+/**
 * A class representing the initial values for each virtual machine configuration.
 * Also requires any Context class to provide a dump function for debugging.
 * */
@@ -44,5 +44,6 @@ public abstract class AbstractContext {
     public CacheEvictionPolicy tlbEviction = CacheEvictionPolicy.LRU;
     public MachineIO machineIO = new MachineIO();
 
+    // The actual context class needs to implement a mass-printing function for debugging
     public abstract void dump();
 }

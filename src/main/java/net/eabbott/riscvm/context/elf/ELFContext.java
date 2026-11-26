@@ -5,11 +5,15 @@ import java.io.RandomAccessFile;
 import java.util.List;
 import java.util.Vector;
 
+/**
+ * Reads ELF files, storing the relevant data as properties.
+ */
 public class ELFContext {
     public ELFHeader header;
     public List<ELFProgramHeader> programHeaders;
     public RandomAccessFile reader;
 
+    // Reads an ELF file
     public static ELFContext read(String elfFile) throws IOException {
         ELFContext context = new ELFContext();
         context.reader = new RandomAccessFile(elfFile, "r");

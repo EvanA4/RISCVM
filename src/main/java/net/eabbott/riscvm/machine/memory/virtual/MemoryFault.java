@@ -1,5 +1,8 @@
 package net.eabbott.riscvm.machine.memory.virtual;
 
+/**
+ * A custom exception for tracking discrepancies between access types and page table entry permissions.
+ */
 public class MemoryFault extends RuntimeException {
     public final FaultType type;
     public final long virtualAddress;

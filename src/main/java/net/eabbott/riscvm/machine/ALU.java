@@ -2,6 +2,9 @@ package net.eabbott.riscvm.machine;
 
 import net.eabbott.riscvm.machine.instruction.ALUOp;
 
+/**
+ * The ALU of each hart.
+ */
 public final class ALU {
     private int result;
     private boolean negative;
@@ -9,6 +12,9 @@ public final class ALU {
     private boolean carry;
     private boolean overflow;
 
+    /**
+     * Performs an ALU operation for the corresponding hart, updating the NZCV flags
+     */
     public int execute(ALUOp op, int a, int b) {
         // Assume false for all NZCV
         negative = false;
@@ -71,6 +77,7 @@ public final class ALU {
         return result;
     }
 
+    // A helper function for performing the ADD operation
     private void executeAdd(int a, int b) {
         long ua = Integer.toUnsignedLong(a);
         long ub = Integer.toUnsignedLong(b);
@@ -82,6 +89,7 @@ public final class ALU {
         updateNegativeAndZero();
     }
 
+    // A helper function for performing the SUB operation
     private void executeSub(int a, int b) {
         long ua = Integer.toUnsignedLong(a);
         long ub = Integer.toUnsignedLong(b);
@@ -95,10 +103,13 @@ public final class ALU {
         updateNegativeAndZero();
     }
 
+    // A helper function for setting the N and Z flags
     private void updateNegativeAndZero() {
         negative = (result & 0x8000_0000) != 0;
         zero = result == 0;
     }
+
+    // Getters and setters for the result and NZCV flags
 
     public int getResult() {
         return result;
