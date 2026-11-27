@@ -2,12 +2,14 @@ package net.eabbott.riscvm.machine.stage;
 
 import net.eabbott.riscvm.machine.Hart;
 import net.eabbott.riscvm.machine.HartStatus;
+import net.eabbott.riscvm.machine.VirtualMachine;
 import net.eabbott.riscvm.machine.instruction.AMOOp;
 import net.eabbott.riscvm.machine.instruction.Instruction;
 import net.eabbott.riscvm.machine.instruction.Opcode;
 import net.eabbott.riscvm.machine.memory.AMOResult;
 import net.eabbott.riscvm.machine.memory.cache.MemoryResult;
 import net.eabbott.riscvm.machine.memory.virtual.AccessType;
+import net.eabbott.riscvm.machine.memory.virtual.MemoryFault;
 import net.eabbott.riscvm.machine.register.PipelineRegister;
 import net.eabbott.riscvm.util.BinaryUtil;
 import net.eabbott.riscvm.util.VMLogger;
@@ -85,13 +87,19 @@ public class MemoryStage extends AbstractStage {
                 case 0b010 -> 2; // LH
                 case 0b011 -> 4; // LW
                 default -> {
-                    hart.status = HartStatus.ILLEGAL_INSTRUCTION;
+                    VirtualMachine.getInstance().parkHart(hart.id, HartStatus.ILLEGAL_INSTRUCTION);
                     yield 0;
                 }
             };
             if (hart.status != HartStatus.RUNNING) return;
 
-            MemoryResult result = hart.memman.read(address, size, AccessType.LOAD);
+            MemoryResult result;
+            try {
+                result = hart.memman.read(address, size, AccessType.LOAD);
+            } catch (MemoryFault e) {
+                VirtualMachine.getInstance().parkHart(hart.id, HartStatus.fromMemoryFault(e));
+                return;
+            }
             int value = BinaryUtil.intFromBytesLE(result.data(), 0, size);
 
             // if not LBU, sign extend
@@ -123,11 +131,17 @@ public class MemoryStage extends AbstractStage {
             };
             if (hart.status != HartStatus.RUNNING) return;
 
-            MemoryResult result = hart.memman.write(
-                address,
-                Arrays.copyOfRange(BinaryUtil.bytesFromIntLE(prevReg.getStrval()), 0, size),
-                AccessType.STORE
-            );
+            MemoryResult result;
+            try {
+                result = hart.memman.write(
+                    address,
+                    Arrays.copyOfRange(BinaryUtil.bytesFromIntLE(prevReg.getStrval()), 0, size),
+                    AccessType.STORE
+                );
+            } catch (MemoryFault e) {
+                VirtualMachine.getInstance().parkHart(hart.id, HartStatus.fromMemoryFault(e));
+                return;
+            }
             if (result.shouldWait() > 0) {
                 logger.verbose("Memory manager requested %d stalls for STORE of %d at %d!", result.shouldWait(), prevReg.getStrval(), address);
                 setStall();
@@ -143,7 +157,13 @@ public class MemoryStage extends AbstractStage {
             int operand = prevReg.getStrval();
 
             if (operation == AMOOp.LR) {
-                AMOResult result = hart.memman.loadReserved(address);
+                AMOResult result;
+                try {
+                    result = hart.memman.loadReserved(address);
+                } catch (MemoryFault e) {
+                    VirtualMachine.getInstance().parkHart(hart.id, HartStatus.fromMemoryFault(e));
+                    return;
+                }
                 if (result.shouldWait() > 0) {
                     setStall();
                     toWait = result.shouldWait() - 1;
@@ -155,7 +175,13 @@ public class MemoryStage extends AbstractStage {
             }
 
             if (operation == AMOOp.SC) {
-                AMOResult result = hart.memman.storeConditional(address, operand);
+                AMOResult result;
+                try {
+                    result = hart.memman.storeConditional(address, operand);
+                } catch (MemoryFault e) {
+                    VirtualMachine.getInstance().parkHart(hart.id, HartStatus.fromMemoryFault(e));
+                    return;
+                }
                 if (result.shouldWait() > 0) {
                     setStall();
                     toWait = result.shouldWait() - 1;
@@ -166,22 +192,28 @@ public class MemoryStage extends AbstractStage {
                 return;
             }
 
-            AMOResult result = hart.memman.rmw(address, prev -> switch (operation) {
-                case SWAP -> operand;
-                case ADD -> prev + operand;
-                case XOR -> prev ^ operand;
-                case AND -> prev & operand;
-                case OR  -> prev | operand;
-                case MIN -> Math.min(prev, operand);
-                case MAX -> Math.max(prev, operand);
-                case MINU -> Integer.compareUnsigned(prev, operand) <= 0
-                        ? prev : operand;
-                case MAXU -> Integer.compareUnsigned(prev, operand) >= 0
-                        ? prev : operand;
-                default -> throw new IllegalArgumentException(
-                        "Unsupported AMO operation: " + operation
-                );
-            });
+            AMOResult result;
+            try {
+                result = hart.memman.rmw(address, prev -> switch (operation) {
+                    case SWAP -> operand;
+                    case ADD -> prev + operand;
+                    case XOR -> prev ^ operand;
+                    case AND -> prev & operand;
+                    case OR  -> prev | operand;
+                    case MIN -> Math.min(prev, operand);
+                    case MAX -> Math.max(prev, operand);
+                    case MINU -> Integer.compareUnsigned(prev, operand) <= 0
+                            ? prev : operand;
+                    case MAXU -> Integer.compareUnsigned(prev, operand) >= 0
+                            ? prev : operand;
+                    default -> throw new IllegalArgumentException(
+                            "Unsupported AMO operation: " + operation
+                    );
+                });
+            } catch (MemoryFault e) {
+                VirtualMachine.getInstance().parkHart(hart.id, HartStatus.fromMemoryFault(e));
+                return;
+            }
             if (result.shouldWait() > 0) {
                 setStall();
                 toWait = result.shouldWait() - 1;

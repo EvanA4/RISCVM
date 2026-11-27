@@ -194,12 +194,5 @@ public class VirtualMachine {
 }
 
 /*
-* TODO:
-*   - All hart statuses should be reachable
-*       - check if all memory fault exceptions are caught
-*   - throw an ILLEGAL INSTRUCTION error if DECODE detects an AMO instruction without the A extension
-* */
-
-/*
 ./run.sh -i elfs/nothing.elf -harts 1 -mmu on -cL 3 -log i -hz 100000
  */

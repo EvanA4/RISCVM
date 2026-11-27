@@ -72,8 +72,8 @@ public class FetchStage extends AbstractStage {
             } else {
                 try {
                     result = this.hart.memman.read(currentPC, 4, AccessType.FETCH);
-                } catch (MemoryFault e) {
-                    VirtualMachine.getInstance().parkHart(hart.id, HartStatus.FETCH_FAULT);
+                }  catch (MemoryFault e) {
+                    VirtualMachine.getInstance().parkHart(hart.id, HartStatus.fromMemoryFault(e));
                 }
             }
         }
