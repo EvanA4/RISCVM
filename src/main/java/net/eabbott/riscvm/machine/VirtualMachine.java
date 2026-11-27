@@ -195,12 +195,9 @@ public class VirtualMachine {
 
 /*
 * TODO:
-*   - confirm whether FETCH needs to stall for cache misses and whatnot
-*   - FETCH branch prediction should also support JAL and maybe JALR
-*   - throw an ILLEGAL INSTRUCTION error if DECODE detects an AMO instruction without the A extension
-*   - `nothing.elf` gets freaky with multiple harts
 *   - All hart statuses should be reachable
 *       - check if all memory fault exceptions are caught
+*   - throw an ILLEGAL INSTRUCTION error if DECODE detects an AMO instruction without the A extension
 * */
 
 /*

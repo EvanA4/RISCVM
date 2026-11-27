@@ -54,10 +54,19 @@ public class BranchPredictor {
         if (!this.enabled) return;
         int index = Math.toIntExact(programCounter % this.branchTargetBuffer.length);
 
-        // Update values
-        this.branchTargetBuffer[index] = jumpLocation;
-        byte prediction = this.branchPredictionTable[index];
+        // Shift register logic
+        int prev = this.branchPredictionTable[index];
         int delta = increment ? 1 : -1;
-        this.branchPredictionTable[index] = (byte) ((prediction + delta) & 0b11);
+        int isDeltaPositive = ((~delta) >> 1) & 1;
+        int isDeltaNegative = (delta >> 1) & 1;
+        int all1s = (prev & 1) * ((prev >> 1) & 1);
+        int all0s = ((~prev) & 1) * (((~prev) >> 1) & 1);
+        int notAll1s = (~all1s) & 1;
+        int notAll0s = (~all0s) & 1;
+
+        // Update target values
+        this.branchTargetBuffer[index] = jumpLocation;
+        this.branchPredictionTable[index] += (byte) (isDeltaPositive * delta * notAll1s +
+                isDeltaNegative * delta * notAll0s);
     }
 }

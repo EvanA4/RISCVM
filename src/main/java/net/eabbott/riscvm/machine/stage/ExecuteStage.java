@@ -170,10 +170,12 @@ public class ExecuteStage extends AbstractStage {
         } else if (opcode == Opcode.JAL) {
             result = pc + 4; // Return address written to rd.
             actualNextPc = pc + prevReg.getDisp();
+            hart.branchPredictor.update(pc, actualNextPc, true);
 
         } else if (opcode == Opcode.JALR) {
             result = pc + 4; // Return address written to rd.
             actualNextPc = (left + right) & ~1;
+            hart.branchPredictor.update(pc, actualNextPc, true);
         }
 
         boolean isControlFlow = opcode == Opcode.BRANCH
